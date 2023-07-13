@@ -5,7 +5,6 @@ use actix_web_actors::ws;
 use actix_cors::Cors;
 use rand::Rng;
 use serde_json::json;
-use serde_derive::{Serialize, Deserialize};
 use rusqlite::{Connection, Result};
 
 type Grid = Vec<u8>;

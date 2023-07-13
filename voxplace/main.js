@@ -25,7 +25,8 @@ planeGeometry.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
 let voxels = [];
 let palette = [];
 let selectMesh = null;
-let previewMesh = null;
+let previewLeftClickMesh = null;
+let previewRightClickMesh = null;
 let chunks = [];
 
 const raycaster = new THREE.Raycaster();
@@ -43,7 +44,7 @@ let xUpdate = 0;
 let yUpdate = 0;
 let zUpdate = 0;
 
-let socket = new WebSocket('ws://${window.location.hostname}:8000/api/place/temp/ws/');
+let socket = new WebSocket(`ws://${window.location.hostname}:8000/api/place/temp/ws/`);
 
 initStats();
 initScene();
@@ -109,16 +110,21 @@ function initScene() {
     loader.load('selected.glb', (gltf) => {
         const selectMaterial = new THREE.MeshBasicMaterial({ color: 0xfffffff, depthTest: false });
         const selectGeometry = gltf.scene.children[0].geometry;
-        const previewMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthTest: false });
+        const previewLeftClickMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthTest: false });
+        const previewRightClickMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25, depthTest: false });
         selectMesh = new THREE.Mesh(selectGeometry, selectMaterial);
         selectMesh.scale.set(0.05, 0.05, 0.05);
         selectMesh.renderOrder = 2;
         scene.add(selectMesh);
         selectMesh.visible = false;
-        previewMesh = new THREE.Mesh(selectGeometry, previewMaterial);
-        previewMesh.scale.set(0.05, 0.05, 0.05);
-        previewMesh.renderOrder = 3;
-        scene.add(previewMesh);
+        previewLeftClickMesh = new THREE.Mesh(selectGeometry, previewLeftClickMaterial);
+        previewLeftClickMesh.scale.set(0.05, 0.05, 0.05);
+        previewLeftClickMesh.renderOrder = 3;
+        previewRightClickMesh = new THREE.Mesh(selectGeometry, previewRightClickMaterial);
+        previewRightClickMesh.scale.set(0.05, 0.05, 0.05);
+        previewRightClickMesh.renderOrder = 3;
+        scene.add(previewLeftClickMesh);
+        scene.add(previewRightClickMesh);
     });
 
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -394,42 +400,43 @@ function handleMouseMove(event) {
     const intersects = raycaster.intersectObjects(scene.children, true);
 
     if (intersects.length > 0) {
-        if(intersects[0].object !== selectMesh && intersects[0].object !== previewMesh) {
+        if(intersects[0].object !== selectMesh && intersects[0].object !== previewLeftClickMesh && intersects[0].object !== previewRightClickMesh) {
             const selectedVoxel = intersects[0];
-            let position;
-            if (event.button === 0) {
-                position = new THREE.Vector3(
-                    Math.round(selectedVoxel.point.x - selectedVoxel.face.normal.x / 2),
-                    Math.round(selectedVoxel.point.y - selectedVoxel.face.normal.y / 2),
-                    Math.round(selectedVoxel.point.z - selectedVoxel.face.normal.z / 2)
-                );
-            } else {
-                position = new THREE.Vector3(
-                    Math.round(selectedVoxel.point.x + selectedVoxel.face.normal.x / 2),
-                    Math.round(selectedVoxel.point.y + selectedVoxel.face.normal.y / 2),
-                    Math.round(selectedVoxel.point.z + selectedVoxel.face.normal.z / 2)
-                );
+            let leftClickPosition;
+            let rightClickPosition;
+            leftClickPosition = new THREE.Vector3(
+                Math.round(selectedVoxel.point.x - selectedVoxel.face.normal.x / 2),
+                Math.round(selectedVoxel.point.y - selectedVoxel.face.normal.y / 2),
+                Math.round(selectedVoxel.point.z - selectedVoxel.face.normal.z / 2)
+            );
+            rightClickPosition = new THREE.Vector3(
+                Math.round(selectedVoxel.point.x + selectedVoxel.face.normal.x / 2),
+                Math.round(selectedVoxel.point.y + selectedVoxel.face.normal.y / 2),
+                Math.round(selectedVoxel.point.z + selectedVoxel.face.normal.z / 2)
+            );
+            if(leftClickPosition.y <= -size / 2) {
+                rightClickPosition.y = -size / 2;
             }
-            if (position.x < -size / 2) {
-                position.x = -size / 2;
-            }
-            if (position.x > size / 2 - 1) {
-                position.x = size / 2 - 1;
-            }
-            if (position.y < -size / 2) {
-                position.y = -size / 2;
-            }
-            if (position.y > size / 2 - 1) {
-                position.y = size / 2 - 1;
-            }
-            if (position.z < -size / 2) {
-                position.z = -size / 2;
-            }
-            if (position.z > size / 2 - 1) {
-                position.z = size / 2 - 1;
-            }
-            position.add(new THREE.Vector3(0.5, 0.5, 0));
-            previewMesh.position.copy(position);
+
+            if (leftClickPosition.x < -size / 2) { leftClickPosition.x = -size / 2; }
+            if (leftClickPosition.x > size / 2 - 1) { leftClickPosition.x = size / 2 - 1; }
+            if (leftClickPosition.y < -size / 2) { leftClickPosition.y = -size / 2; }
+            if (leftClickPosition.y > size / 2 - 1) { leftClickPosition.y = size / 2 - 1; }
+            if (leftClickPosition.z < -size / 2) { leftClickPosition.z = -size / 2; }
+            if (leftClickPosition.z > size / 2 - 1) { leftClickPosition.z = size / 2 - 1; }
+
+            if (rightClickPosition.x < -size / 2) { rightClickPosition.x = -size / 2; }
+            if (rightClickPosition.x > size / 2 - 1) { rightClickPosition.x = size / 2 - 1; }
+            if (rightClickPosition.y < -size / 2) { rightClickPosition.y = -size / 2; }
+            if (rightClickPosition.y > size / 2 - 1) { rightClickPosition.y = size / 2 - 1; }
+            if (rightClickPosition.z < -size / 2) { rightClickPosition.z = -size / 2; }
+            if (rightClickPosition.z > size / 2 - 1) { rightClickPosition.z = size / 2 - 1; }
+
+            leftClickPosition.add(new THREE.Vector3(0.5, 0.5, 0));
+            previewLeftClickMesh.position.copy(leftClickPosition);
+
+            rightClickPosition.add(new THREE.Vector3(0.5, 0.5, 0));
+            previewRightClickMesh.position.copy(rightClickPosition);
         }
     }
 }
@@ -457,7 +464,11 @@ function handleMouseUp(event) {
         if (selectMesh.visible === false) {
             selectMesh.visible = true;
         }
-        selectMesh.position.copy(previewMesh.position);
+        if(event.button === 0) {
+            selectMesh.position.copy(previewLeftClickMesh.position);
+        } else if(event.button === 2) {
+            selectMesh.position.copy(previewRightClickMesh.position);
+        }
 
         let x = Math.round(selectMesh.position.x + size / 2 - 0.5);
         let y = Math.round(selectMesh.position.y + size / 2 - 0.5);
@@ -506,7 +517,8 @@ function changeColor() {
         if(input.checked) {
             selectedColor = input.value;
             selectMesh.material.color.set(selectedColor);
-            previewMesh.material.color.set(selectedColor);
+            previewLeftClickMesh.material.color.set(selectedColor);
+            previewRightClickMesh.material.color.set(selectedColor);
         }
     });
 }
@@ -524,7 +536,7 @@ function editVoxel() {
         }
     }
 
-    const url = "http://${window.location.hostname}:8000/api/place/temp/draw/" + x + "/" + y + "/" + z + "/" + voxelvalue + "/client";
+    const url = `http://${window.location.hostname}:8000/api/place/temp/draw/${x}/${y}/${z}/${voxelvalue}/client`;
     fetch(url, {method: "POST"})
         .then(response => {
             if (response.ok) {
