@@ -44,7 +44,7 @@ let xUpdate = 0;
 let yUpdate = 0;
 let zUpdate = 0;
 
-let socket = new WebSocket(`ws://${window.location.hostname}:8000/api/place/temp/ws/`);
+let socket = new WebSocket(`ws://${window.location.hostname}:8000/api/place/temp/ws`);
 
 initStats();
 initScene();
@@ -414,9 +414,6 @@ function handleMouseMove(event) {
                 Math.round(selectedVoxel.point.y + selectedVoxel.face.normal.y / 2),
                 Math.round(selectedVoxel.point.z + selectedVoxel.face.normal.z / 2)
             );
-            if(leftClickPosition.y <= -size / 2) {
-                rightClickPosition.y = -size / 2;
-            }
 
             if (leftClickPosition.x < -size / 2) { leftClickPosition.x = -size / 2; }
             if (leftClickPosition.x > size / 2 - 1) { leftClickPosition.x = size / 2 - 1; }
@@ -431,6 +428,14 @@ function handleMouseMove(event) {
             if (rightClickPosition.y > size / 2 - 1) { rightClickPosition.y = size / 2 - 1; }
             if (rightClickPosition.z < -size / 2) { rightClickPosition.z = -size / 2; }
             if (rightClickPosition.z > size / 2 - 1) { rightClickPosition.z = size / 2 - 1; }
+
+            let x = Math.floor(leftClickPosition.x + (size / 2));
+            let y = Math.floor(leftClickPosition.y + (size / 2));
+            let z = Math.floor(leftClickPosition.z + (size / 2));
+
+            if(leftClickPosition.y <= -size / 2 && voxels[x][y][z] === null) {
+                rightClickPosition.y = -size / 2;
+            }
 
             leftClickPosition.add(new THREE.Vector3(0.5, 0.5, 0));
             previewLeftClickMesh.position.copy(leftClickPosition);

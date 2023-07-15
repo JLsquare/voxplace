@@ -1282,6 +1282,7 @@ dependencies = [
  "actix-cors",
  "actix-web",
  "actix-web-actors",
+ "flate2",
  "rand",
  "rusqlite",
  "serde",
