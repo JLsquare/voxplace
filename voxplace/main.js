@@ -46,14 +46,14 @@ let zUpdate = 0;
 
 let socket = new WebSocket(`ws://${window.location.hostname}:8000/api/place/temp/ws`);
 
-initStats();
-initScene();
-initPalette();
-await initVoxelData();
-initChunks();
-initSocket();
-animate();
-addEventListeners();
+function init(){
+    initStats();
+    initScene();
+    initPalette();
+    initVoxelData();
+    initSocket();
+    addEventListeners();
+}
 
 function initSocket() {
     socket.onopen = () => {
@@ -93,10 +93,10 @@ function initScene() {
     borderMesh.raycast = () => [];
     scene.add(borderMesh);
 
-    const floorMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, depthTest: false });
+    const floorMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const floorMesh = new THREE.Mesh(planeGeometry, floorMaterial);
-    floorMesh.position.set(-0.5, -size / 2, -0.5);
-    floorMesh.renderOrder = 1;
+    floorMesh.position.set(-0.5, -size / 2 - 0.5, -0.5);
+    floorMesh.visible = false;
     scene.add(floorMesh);
 
     const edgesGeometry = new THREE.EdgesGeometry(invertedBoxGeometry);
@@ -195,6 +195,7 @@ async function initVoxelData() {
                     }
                 }
             }
+            initChunks();
         });
 }
 
@@ -215,6 +216,7 @@ function initChunks() {
             }
         }
     }
+    animate();
 }
 
 function generateChunk(x, y, z) {
@@ -438,10 +440,14 @@ function handleMouseMove(event) {
             }
 
             leftClickPosition.add(new THREE.Vector3(0.5, 0.5, 0));
-            previewLeftClickMesh.position.copy(leftClickPosition);
+            if(previewLeftClickMesh) {
+                previewLeftClickMesh.position.copy(leftClickPosition);
+            }
 
             rightClickPosition.add(new THREE.Vector3(0.5, 0.5, 0));
-            previewRightClickMesh.position.copy(rightClickPosition);
+            if(previewRightClickMesh) {
+                previewRightClickMesh.position.copy(rightClickPosition);
+            }
         }
     }
 }
@@ -478,8 +484,12 @@ function handleMouseUp(event) {
         let x = Math.round(selectMesh.position.x + size / 2 - 0.5);
         let y = Math.round(selectMesh.position.y + size / 2 - 0.5);
         let z = Math.round(selectMesh.position.z + size / 2 - 0.5);
-        let infoBar = document.getElementById("info-bar");
-        infoBar.innerHTML = `(${x}, ${y}, ${z}) &ensp; Empty`
+        fetch(`http://${window.location.hostname}:8000/api/place/temp/username/${x}/${y}/${z}`)
+            .then(response => response.text())
+            .then(data => {
+                let infoBar = document.getElementById("info-bar");
+                infoBar.innerHTML = `(${x}, ${y}, ${z}) &ensp; ${data}`
+            });
     }
 
     if (clickCount === 0) {
@@ -533,6 +543,10 @@ function editVoxel() {
     let y = Math.floor(selectMesh.position.y + size / 2);
     let z = Math.floor(selectMesh.position.z + size / 2);
     let voxelvalue = 0;
+    let username = document.getElementById("username-input").value;
+    if(username === "") {
+        username = "Default Username";
+    }
 
     for(let i = 0; i < palette.length - 1; i++) {
         if("#" + palette[i].getHexString() === selectedColor) {
@@ -541,10 +555,13 @@ function editVoxel() {
         }
     }
 
-    const url = `http://${window.location.hostname}:8000/api/place/temp/draw/${x}/${y}/${z}/${voxelvalue}/client`;
+    const url = `http://${window.location.hostname}:8000/api/place/temp/draw/${x}/${y}/${z}/${voxelvalue}/${username}`;
     fetch(url, {method: "POST"})
         .then(response => {
             if (response.ok) {
+                let infoBar = document.getElementById("info-bar");
+                infoBar.innerHTML = `(${x}, ${y}, ${z}) &ensp; ${username}`
+
                 if(selectedColor === 'empty'){
                     voxels[x][y][z] = null;
                 } else {
@@ -630,3 +647,5 @@ function createGradientTexture(colorStops, width=16, height=1024) {
 
     return texture;
 }
+
+init();

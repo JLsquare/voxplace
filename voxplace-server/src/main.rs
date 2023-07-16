@@ -7,6 +7,7 @@ use actix_web::http::header;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, post, App, Error, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web_actors::ws;
+use crossbeam::atomic::AtomicCell;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use rand::Rng;
@@ -16,7 +17,7 @@ use std::collections::HashMap;
 use std::io::prelude::*;
 use std::sync::{Arc, Mutex, RwLock};
 
-type Grid = Vec<u8>;
+type Grid = Vec<AtomicCell<u8>>;
 
 pub struct Database {
     conn: Mutex<Connection>,
@@ -100,6 +101,25 @@ impl Database {
         ])?;
         Ok(())
     }
+
+    pub fn get_username(
+        &self,
+        voxel_object_id: usize,
+        x: usize,
+        y: usize,
+        z: usize,
+    ) -> Result<String> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT username FROM VoxelUpdate WHERE voxel_object_id = ? AND x = ? AND y = ? AND z = ? ORDER BY timestamp DESC LIMIT 1",
+        )?;
+        let mut rows = stmt.query(params![voxel_object_id, x, y, z])?;
+        if let Some(row) = rows.next()? {
+            Ok(row.get(0)?)
+        } else {
+            Err(rusqlite::Error::QueryReturnedNoRows)
+        }
+    }
 }
 
 struct AppState {
@@ -116,15 +136,17 @@ impl AppState {
         }
     }
 
-    fn add_voxel_object(&mut self, voxel_object: VoxelObject) {
-        self.database
+    fn add_voxel_object(&mut self, mut voxel_object: VoxelObject) {
+        let id = self
+            .database
             .add_voxel_object(
                 &voxel_object.name,
                 voxel_object.grid_size,
-                voxel_object.grid.read().unwrap().clone(),
+                voxel_object.grid.iter().map(|cell| cell.load()).collect(),
                 &voxel_object.voxel_type,
             )
             .unwrap();
+        voxel_object.id = id;
         let voxel_object_name = voxel_object.name.clone();
         let voxel_object_arc = Arc::new(voxel_object);
         self.voxel_objects
@@ -133,10 +155,11 @@ impl AppState {
 }
 
 struct VoxelObject {
+    id: usize,
     name: String,
     grid_size: usize,
-    grid: RwLock<Grid>,
-    sessions: Mutex<Vec<Addr<MyWs>>>,
+    grid: Grid,
+    sessions: Mutex<Vec<Addr<WebSocketConnection>>>,
     voxel_type: String,
 }
 
@@ -163,15 +186,16 @@ impl VoxelObject {
         }
 
         Self {
+            id: 0,
             name: name.to_string(),
             grid_size,
-            grid: RwLock::new(grid_data),
+            grid: grid_data.into_iter().map(AtomicCell::new).collect(),
             sessions: Mutex::new(Vec::new()),
             voxel_type: voxel_type.to_string(),
         }
     }
 
-    fn add_session(&self, session: Addr<MyWs>) {
+    fn add_session(&self, session: Addr<WebSocketConnection>) {
         self.sessions.lock().unwrap().push(session);
     }
 
@@ -191,11 +215,11 @@ impl VoxelObject {
 #[rtype(result = "()")]
 struct UpdateMessage(usize, usize, usize, u8);
 
-struct MyWs {
+struct WebSocketConnection {
     voxel_object: Arc<VoxelObject>,
 }
 
-impl Actor for MyWs {
+impl Actor for WebSocketConnection {
     type Context = ws::WebsocketContext<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
@@ -204,7 +228,7 @@ impl Actor for MyWs {
     }
 }
 
-impl Handler<UpdateMessage> for MyWs {
+impl Handler<UpdateMessage> for WebSocketConnection {
     type Result = ();
 
     fn handle(&mut self, msg: UpdateMessage, ctx: &mut Self::Context) {
@@ -221,7 +245,7 @@ impl Handler<UpdateMessage> for MyWs {
     }
 }
 
-impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketConnection {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         match msg {
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
@@ -236,19 +260,17 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
 async fn ws_index(
     req: HttpRequest,
     stream: Payload,
-    state: Data<Mutex<AppState>>,
+    state: Data<RwLock<AppState>>,
     path: Path<String>,
 ) -> Result<HttpResponse, Error> {
-    println!("test");
     let name = path.into_inner();
-    println!("New websocket connection {:?}", req.connection_info());
 
-    let app_state = state.lock().unwrap();
+    let app_state = state.read().unwrap();
     let voxel_object = app_state.voxel_objects.get(&name);
 
     match voxel_object {
         Some(voxel_object) => ws::start(
-            MyWs {
+            WebSocketConnection {
                 voxel_object: voxel_object.clone(),
             },
             &req,
@@ -259,16 +281,17 @@ async fn ws_index(
 }
 
 #[get("/api/place/{name}/all")]
-async fn get_grid(data: Data<Mutex<AppState>>, path: Path<String>) -> impl Responder {
+async fn get_grid(data: Data<RwLock<AppState>>, path: Path<String>) -> impl Responder {
     let name = path.into_inner();
-    let app_state = data.lock().unwrap();
-    let grid = app_state
-        .voxel_objects
-        .get(&name)
-        .unwrap()
-        .grid
-        .read()
-        .unwrap();
+    let app_state = data.read().unwrap();
+
+    let voxel_object_option = app_state.voxel_objects.get(&name);
+    if voxel_object_option.is_none() {
+        return HttpResponse::BadRequest().body("Invalid voxel object");
+    }
+
+    let voxel_object = voxel_object_option.unwrap();
+    let grid: Vec<u8> = voxel_object.grid.iter().map(|cell| cell.load()).collect();
 
     let mut e = GzEncoder::new(Vec::new(), Compression::default());
     e.write_all(&grid).expect("Failed to write data");
@@ -279,16 +302,57 @@ async fn get_grid(data: Data<Mutex<AppState>>, path: Path<String>) -> impl Respo
         .body(compressed_data)
 }
 
+#[get("/api/place/{name}/username/{x}/{y}/{z}")]
+async fn get_username(
+    data: Data<RwLock<AppState>>,
+    path: Path<(String, usize, usize, usize)>,
+) -> impl Responder {
+    let (name, x, y, z) = path.into_inner();
+    let app_state = data.read().unwrap();
+
+    let voxel_object_option = app_state.voxel_objects.get(&name);
+    if voxel_object_option.is_none() {
+        return HttpResponse::BadRequest().body("Invalid voxel object");
+    }
+
+    let voxel_object = voxel_object_option.unwrap();
+    let username = app_state.database.get_username(voxel_object.id, x, y, z);
+
+    match username {
+        Ok(username) =>
+            HttpResponse::Ok()
+                .append_header((header::CONTENT_TYPE, "text/plain"))
+                .body(username),
+        Err(_) =>
+            HttpResponse::Ok()
+                .append_header((header::CONTENT_TYPE, "text/plain"))
+                .body("Empty / Server"),
+    }
+}
+
 #[post("/api/place/{name}/draw/{x}/{y}/{z}/{color}/{username}")]
 async fn draw_voxel(
-    data: Data<Mutex<AppState>>,
+    data: Data<RwLock<AppState>>,
     path: Path<(String, usize, usize, usize, u8, String)>,
 ) -> impl Responder {
     let (name, x, y, z, color, username) = path.into_inner();
 
-    let app_state = data.lock().unwrap();
-    let voxel_object = app_state.voxel_objects.get(&name).unwrap();
-    let mut grid = voxel_object.grid.write().unwrap();
+    #[allow(unused_assignments)]
+    let mut voxel_object_option = None;
+    let mut grid: Vec<u8> = Vec::new();
+    {
+        let app_state = data.read().unwrap();
+        voxel_object_option = app_state.voxel_objects.get(&name).cloned();
+        if let Some(ref voxel_object) = voxel_object_option {
+            grid = voxel_object.grid.iter().map(|cell| cell.load()).collect();
+        }
+    }
+
+    if voxel_object_option.is_none() {
+        return HttpResponse::BadRequest().body("Invalid voxel object");
+    }
+
+    let voxel_object = voxel_object_option.unwrap();
     let at_bottom = y == 0;
     let mut has_neighbor = false;
 
@@ -312,12 +376,15 @@ async fn draw_voxel(
     }
 
     if at_bottom || has_neighbor || grid[voxel_object.get_index(x, y, z)] > 0 {
-        grid[voxel_object.get_index(x, y, z)] = color;
+        voxel_object.grid[voxel_object.get_index(x, y, z)].store(color);
         voxel_object.broadcast(UpdateMessage(x, y, z, color));
-        println!("Updated voxel at {}, {}, {}, by {}", x, y, z, username);
+        let app_state = data.write().unwrap();
+        app_state
+            .database
+            .add_voxel_update(voxel_object.id, x, y, z, color, &username)
+            .unwrap();
         HttpResponse::Ok().body("OK")
     } else {
-        println!("Voxel at {}, {}, {} has no neighbors", x, y, z);
         HttpResponse::BadRequest().body("Voxel has no neighbors")
     }
 }
@@ -327,10 +394,10 @@ async fn main() -> std::io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let param = if args.len() > 1 { &args[1] } else { "" };
     let db = Database::new();
-    let app_state = Data::new(Mutex::new(AppState::new(db.unwrap())));
+    let app_state = Data::new(RwLock::new(AppState::new(db.unwrap())));
 
     {
-        let mut app_state_guard = app_state.lock().unwrap();
+        let mut app_state_guard = app_state.write().unwrap();
         let temp_voxel_object = VoxelObject::new("temp", 128, param);
         app_state_guard.add_voxel_object(temp_voxel_object);
     }
@@ -350,8 +417,9 @@ async fn main() -> std::io::Result<()> {
             .service(get_grid)
             .service(ws_index)
             .service(draw_voxel)
+            .service(get_username)
     })
-    .bind("127.0.0.1:8000")?
+    .bind("0.0.0.0:8000")?
     .run()
     .await
 }
