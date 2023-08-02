@@ -43,7 +43,7 @@ async function testToken() {
     if (decodedToken.exp * 1000 < dateNow.getTime()) {
       console.log('Token expired.');
     } else {
-      const response = await fetch('http://localhost:8000/api/user/checkadmin', {
+      const response = await fetch(`http://${window.location.hostname}:8000/api/user/checkadmin`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

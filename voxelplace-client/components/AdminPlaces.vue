@@ -37,7 +37,7 @@ onMounted(() => {
 });
 
 async function getPlaces() {
-  const res = await fetch('http://localhost:8000/api/place/infos');
+  const res = await fetch(`http://${window.location.hostname}:8000/api/place/infos`);
   const data = await res.json();
   console.log(data);
   places.value = data;
@@ -50,7 +50,7 @@ async function createPlace() {
     "palette": palette.value
   };
 
-  const response = await fetch('http://localhost:8000/api/place/create', {
+  const response = await fetch(`http://${window.location.hostname}:8000/api/place/create`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

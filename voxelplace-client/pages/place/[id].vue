@@ -521,7 +521,7 @@ async function handleMouseUp(event) {
       z: z
     }
 
-    const response = await fetch('http://localhost:8000/api/place/username', {
+    const response = await fetch(`http://${window.location.hostname}:8000/api/place/username`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -601,7 +601,7 @@ async function editVoxel() {
     color: voxelvalue,
   }
 
-  fetch('http://localhost:8000/api/place/draw', {
+  fetch(`http://${window.location.hostname}:8000/api/place/draw`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
