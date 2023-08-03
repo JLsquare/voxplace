@@ -16,7 +16,9 @@ impl AppState {
         database.init();
 
         let places_infos = match database.get_places_infos() {
-            Ok(places_infos) => places_infos,
+            Ok(places_infos) => {
+                places_infos
+            },
             Err(e) => {
                 eprintln!("Failed to get places info: {}", e);
                 vec![]
@@ -24,6 +26,7 @@ impl AppState {
         };
 
         for place_info in places_infos {
+            println!("Place info: {:?}", place_info);
             if place_info.1 {
                 let voxel = match Voxel::read(place_info.2) {
                     Ok(voxel) => voxel,

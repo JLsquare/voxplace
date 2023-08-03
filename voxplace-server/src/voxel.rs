@@ -12,36 +12,18 @@ use std::io::{BufWriter, Read, Write};
 use std::sync::{Arc, Mutex, RwLock};
 
 type Grid = Vec<AtomicCell<u8>>;
+type Color = (u8, u8, u8);
 
 #[derive(Message, Clone, Copy)]
 #[rtype(result = "()")]
 pub struct UpdateMessage(pub usize, pub usize, pub usize, pub u8);
-
-#[derive(Clone, Serialize)]
-pub struct Material {
-    pub color: (u8, u8, u8, u8),
-    pub emission: u8,
-    pub roughness: u8,
-    pub metallic: u8,
-}
-
-impl Material {
-    pub(crate) fn new(color: (u8, u8, u8, u8), emission: u8, roughness: u8, metallic: u8) -> Self {
-        Self {
-            color,
-            emission,
-            roughness,
-            metallic,
-        }
-    }
-}
 
 pub struct Voxel {
     pub id: i64,
     pub name: String,
     pub grid_size: (usize, usize, usize),
     pub grid: Grid,
-    pub palette: Vec<Material>,
+    pub palette: Vec<Color>,
     sessions: Mutex<Vec<Addr<PlaceWebSocketConnection>>>,
     pending_updates: RwLock<Vec<PlaceUserUpdate>>,
 }
@@ -50,13 +32,13 @@ impl Voxel {
     pub fn new(
         id: i64,
         name: &str,
-        palette: Option<Vec<Material>>,
+        palette: Option<Vec<Color>>,
         grid_size: (usize, usize, usize),
         grid: Option<Grid>,
     ) -> Self {
         let grid = grid.unwrap_or_else(|| Voxel::generate_empty_grid(grid_size));
 
-        let colors = vec![
+        let palette: Vec<Color> = vec![
             (0x6d, 0x00, 0x1a),
             (0xbe, 0x00, 0x39),
             (0xff, 0x45, 0x00),
@@ -90,13 +72,6 @@ impl Voxel {
             (0xd4, 0xd7, 0xd9),
             (0xff, 0xff, 0xff),
         ];
-
-        let palette = palette.unwrap_or_else(|| {
-            colors
-                .into_iter()
-                .map(|color| Material::new((color.0, color.1, color.2, 255), 0, 0, 0))
-                .collect()
-        });
 
         Self {
             id,
@@ -248,14 +223,10 @@ impl Voxel {
         bytes.extend_from_slice(&(self.grid_size.1 as u16).to_le_bytes());
         bytes.extend_from_slice(&(self.grid_size.2 as u16).to_le_bytes());
 
-        for material in self.palette.iter() {
-            bytes.push(material.color.0);
-            bytes.push(material.color.1);
-            bytes.push(material.color.2);
-            bytes.push(material.color.3);
-            bytes.push(material.emission);
-            bytes.push(material.roughness);
-            bytes.push(material.metallic);
+        for color in self.palette.iter() {
+            bytes.push(color.0);
+            bytes.push(color.1);
+            bytes.push(color.2);
         }
 
         let grid: Vec<u8> = self.grid.iter().map(|cell| cell.load()).collect();
@@ -305,16 +276,12 @@ impl Voxel {
 
         let mut palette = Vec::new();
         for _ in 0..palette_size {
-            let color = (
-                reader.read_u8()?,
+            let color: Color = (
                 reader.read_u8()?,
                 reader.read_u8()?,
                 reader.read_u8()?,
             );
-            let emission = reader.read_u8()?;
-            let roughness = reader.read_u8()?;
-            let metallic = reader.read_u8()?;
-            palette.push(Material::new(color, emission, roughness, metallic));
+            palette.push(color);
         }
 
         let mut grid = Vec::new();

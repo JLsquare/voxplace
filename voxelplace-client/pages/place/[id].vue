@@ -1,6 +1,6 @@
 <template>
   <div class="m-0 flex flex-col justify-center items-center h-screen font-roboto">
-    <PlaceTopBar class="absolute top-0 left-0"/>
+    <PlaceTopBar :text="infoBarText" class="absolute top-0 left-0"/>
     <canvas id="canvas" />
     <div class="flex absolute bottom-0 items-center justify-center mb-4 h-24 space-x-8">
       <div id="color-controls" v-show="showPalette" class="bg-white py-2 px-4 overflow-hidden rounded-2xl border-2 border-black shadow-custom grid grid-rows-2 grid-flow-col gap-2">
@@ -30,6 +30,7 @@ let renderer;
 let controls;
 let loader;
 let showPalette = ref(true);
+let infoBarText = ref('(0, 0, 0)   Empty / Server');
 
 const invertedBoxGeometry = new THREE.BoxGeometry(size, size, size);
 invertedBoxGeometry.applyMatrix4(new THREE.Matrix4().makeScale(-1, -1, -1));
@@ -530,8 +531,7 @@ async function handleMouseUp(event) {
     });
 
     const username = await response.json();
-    let infoBar = document.getElementById("info-bar");
-    infoBar.innerHTML = `(${x}, ${y}, ${z}) &ensp; ${username}`
+    infoBarText.value = `(${x}, ${y}, ${z})   ${username}`
   }
 
   if (clickCount === 0) {
@@ -611,8 +611,7 @@ async function editVoxel() {
   })
       .then(async response => {
         if (response.ok) {
-          let infoBar = document.getElementById("info-bar");
-          infoBar.innerHTML = `(${x}, ${y}, ${z}) &ensp; ${await response.json()}`
+          infoBarText.value = `(${x}, ${y}, ${z})   ${await response.json()}`
 
           if (selectedColor === 'empty') {
             voxels[x][y][z] = null;

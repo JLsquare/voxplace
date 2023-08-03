@@ -114,6 +114,25 @@ async fn get_grid(data: Data<RwLock<AppState>>, path: Path<String>) -> impl Resp
         .body(compressed_data)
 }
 
+#[get("/api/place/palette/{id}")]
+async fn get_palette(data: Data<RwLock<AppState>>, path: Path<String>) -> impl Responder {
+    let id = path.into_inner().parse::<i64>().unwrap();
+    let app_state = data.read().unwrap();
+
+    let place = match app_state.places.get(&id) {
+        Some(place) => place,
+        None => return HttpResponse::BadRequest().body("Invalid place"),
+    };
+
+    let palette_hex: Vec<String> = place.voxel.palette
+        .iter()
+        .map(|&(r, g, b)| format!("#{:02x}{:02x}{:02x}", r, g, b))
+        .collect();
+
+    HttpResponse::Ok().json(palette_hex)
+}
+
+
 #[post("/api/place/draw")]
 async fn draw_voxel_http(
     data: Data<RwLock<AppState>>,

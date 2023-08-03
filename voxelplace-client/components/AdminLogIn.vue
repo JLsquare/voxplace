@@ -51,7 +51,7 @@ async function login() {
     password: password.value,
   }
 
-  let response = await fetch('http://localhost:8000/api/user/login', {
+  let response = await fetch(`http://${window.location.hostname}:8000/api/user/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -67,7 +67,7 @@ async function login() {
 
   token.value = await response.json();
 
-  response = await fetch('http://localhost:8000/api/user/checkadmin', {
+  response = await fetch(`http://${window.location.hostname}:8000/api/user/checkadmin`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
