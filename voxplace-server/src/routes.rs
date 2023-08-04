@@ -51,16 +51,13 @@ struct CreatePlaceRequest {
     name: String,
     size: (usize, usize, usize),
     palette: String,
+    cooldown: usize,
 }
 
 #[derive(Serialize)]
-struct PlaceInfo {
-    name: String,
-    id: String,
-    size: (usize, usize, usize),
-    palette: String,
-    online: bool,
-    online_users: usize,
+struct DrawResponse {
+    username: String,
+    cooldown: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -139,7 +136,7 @@ async fn draw_voxel_http(
     req: HttpRequest,
     json: Json<DrawRequest>,
 ) -> impl Responder {
-    let app_state = data.read().unwrap();
+    let mut app_state = data.write().unwrap();
 
     let place_id = match json.id.parse::<i64>() {
         Ok(id) => id,
@@ -170,20 +167,86 @@ async fn draw_voxel_http(
         Err(_) => return HttpResponse::Unauthorized().body("Invalid token"),
     };
 
+    let cooldown = match app_state.database.lock().unwrap().get_user_cooldown(place_id, user_id) {
+        Ok(cooldown) => cooldown,
+        Err(_) => 0,
+    };
+
+    let time = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    if cooldown > time {
+        return HttpResponse::BadRequest().body("Cooldown not finished");
+    }
+
+    match app_state.database.lock().unwrap().set_user_cooldown(place_id, user_id, time + place.cooldown) {
+        Ok(_) => (),
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to set cooldown"),
+    }
+
+    let cooldown = place.cooldown.clone();
+
     let username = match app_state.database.lock().unwrap().get_username(user_id) {
         Ok(username) => username,
         Err(_) => return HttpResponse::InternalServerError().body("Failed to get username"),
     };
 
-    if let Err(_) = place
-        .voxel
-        .draw_voxel(json.x, json.y, json.z, json.color, user_id)
-    {
-        return HttpResponse::InternalServerError().body("Failed to draw voxel");
-    }
+    match place.voxel.draw_voxel(json.x, json.y, json.z, json.color) {
+        Ok(_) => (),
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
 
-    HttpResponse::Ok().json(username)
+    place.add_place_update(json.x, json.y, json.z, user_id);
+
+    app_state.places_updates();
+
+    let response = DrawResponse {
+        username,
+        cooldown: cooldown + time,
+    };
+
+    HttpResponse::Ok().json(response)
 }
+
+#[get("/api/place/cooldown/{id}")]
+async fn get_cooldown(
+    data: Data<RwLock<AppState>>,
+    req: HttpRequest,
+    path: Path<String>,
+) -> impl Responder {
+    let id = path.into_inner().parse::<i64>().unwrap();
+
+    let app_state = data.write().unwrap();
+
+    let token = match req.headers().get("Authorization") {
+        Some(token) => token,
+        None => return HttpResponse::Unauthorized().body("No token provided"),
+    };
+
+    let token_str = match token.to_str() {
+        Ok(t) => t,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to parse token"),
+    };
+
+    let user_id = match decode::<Claims>(
+        &token_str,
+        &DecodingKey::from_secret("secret".as_bytes()),
+        &Validation::new(Algorithm::HS256),
+    ) {
+        Ok(c) => c.claims.sub,
+        Err(_) => return HttpResponse::Unauthorized().body("Invalid token"),
+    };
+
+    let cooldown = match app_state.database.lock().unwrap().get_user_cooldown(id, user_id) {
+        Ok(cooldown) => cooldown,
+        Err(_) => 0,
+    };
+
+    HttpResponse::Ok().json(cooldown)
+}
+
 
 #[get("/api/place/infos")]
 async fn get_places_info(data: Data<RwLock<AppState>>) -> impl Responder {
@@ -194,24 +257,7 @@ async fn get_places_info(data: Data<RwLock<AppState>>) -> impl Responder {
         Err(_) => return HttpResponse::InternalServerError().body("Failed to get places infos"),
     };
 
-    let mut info = Vec::new();
-
-    for place_info in places_infos {
-        info.push(PlaceInfo {
-            name: place_info.3,
-            id: place_info.0.to_string(),
-            size: (
-                place_info.4 as usize,
-                place_info.5 as usize,
-                place_info.6 as usize,
-            ),
-            palette: "TODO".to_string(),
-            online: place_info.1,
-            online_users: place_info.2 as usize,
-        });
-    }
-
-    HttpResponse::Ok().json(info)
+    HttpResponse::Ok().json(places_infos)
 }
 
 #[post("/api/place/username")]
@@ -235,7 +281,7 @@ async fn get_username(data: Data<RwLock<AppState>>, json: Json<UsernameRequest>)
 
     let username = match app_state.database.lock().unwrap().get_username(user_id) {
         Ok(username) => username,
-        Err(_) => return HttpResponse::Ok().json("Empty / Server"),
+        Err(_) => return HttpResponse::Ok().json(user_id.to_string()),
     };
 
     HttpResponse::Ok().json(username)
@@ -388,7 +434,7 @@ async fn create_place(
     let mut app_state = data.write().unwrap();
     let voxel = Voxel::new(voxel_id, &json.name, None, json.size, None);
     voxel.write().unwrap();
-    let place = Place::new(place_id, true, voxel);
+    let place = Place::new(place_id, true, json.cooldown as i64, voxel);
     app_state.add_place(place);
 
     HttpResponse::Ok().json("ok")

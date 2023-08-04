@@ -20,7 +20,7 @@ async function getPlaces() {
   const res = await fetch(`http://${window.location.hostname}:8000/api/place/infos`);
   const data = await res.json();
   for(let i = 0; i < data.length; i++) {
-    places.value.push({name: data[i].name, id: data[i].id});
+    places.value.push({name: data[i].name, id: data[i].place_id});
   }
 }
 </script>

@@ -1,4 +1,3 @@
-use crate::database::place::PlaceUserUpdate;
 use crate::websocket::PlaceWebSocketConnection;
 use actix::{Addr, Message};
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -6,10 +5,9 @@ use crossbeam::atomic::AtomicCell;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use rand::Rng;
-use serde_derive::Serialize;
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 
 type Grid = Vec<AtomicCell<u8>>;
 type Color = (u8, u8, u8);
@@ -25,7 +23,6 @@ pub struct Voxel {
     pub grid: Grid,
     pub palette: Vec<Color>,
     sessions: Mutex<Vec<Addr<PlaceWebSocketConnection>>>,
-    pending_updates: RwLock<Vec<PlaceUserUpdate>>,
 }
 
 impl Voxel {
@@ -80,7 +77,6 @@ impl Voxel {
             grid,
             palette,
             sessions: Mutex::new(Vec::new()),
-            pending_updates: RwLock::new(Vec::new()),
         }
     }
 
@@ -90,7 +86,6 @@ impl Voxel {
         y: usize,
         z: usize,
         color: u8,
-        user_id: i64,
     ) -> Result<(), String> {
         let grid = &self.grid;
         let at_bottom = y == 0;
@@ -122,28 +117,10 @@ impl Voxel {
         if at_bottom || has_neighbor || grid[self.get_index(x, y, z)].load() > 0 {
             grid[self.get_index(x, y, z)].store(color);
             self.broadcast(UpdateMessage(x, y, z, color));
-            self.add_place_update(x, y, z, user_id);
             Ok(())
         } else {
             Err("Voxel has no neighbors".to_string())
         }
-    }
-
-    pub fn add_place_update(&self, x: usize, y: usize, z: usize, user_id: i64) -> () {
-        let voxel_update = PlaceUserUpdate {
-            x,
-            y,
-            z,
-            user_id,
-            place_id: self.id,
-        };
-        self.pending_updates.write().unwrap().push(voxel_update);
-    }
-
-    pub fn get_place_updates(&self) -> Vec<PlaceUserUpdate> {
-        let mut pending_updates = self.pending_updates.write().unwrap();
-        let updates = pending_updates.drain(..).collect();
-        updates
     }
 
     pub fn start_save_loop(self: &Arc<Self>) {
@@ -239,8 +216,6 @@ impl Voxel {
 
         writer.write_all(&bytes)?;
         writer.flush()?;
-
-        println!("Saved voxel object {}", self.id);
 
         Ok(())
     }

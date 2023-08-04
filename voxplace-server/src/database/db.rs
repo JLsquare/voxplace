@@ -19,5 +19,6 @@ impl Database {
         self.create_voxel_table().unwrap();
         self.create_place_table().unwrap();
         self.create_place_user_table().unwrap();
+        self.create_place_user_cooldown_table().unwrap();
     }
 }

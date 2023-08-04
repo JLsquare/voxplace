@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 pub struct AppState {
     pub database: Arc<Mutex<Database>>,
     pub places: HashMap<i64, Arc<Place>>,
+    last_update: i64,
 }
 
 impl AppState {
@@ -27,15 +28,17 @@ impl AppState {
 
         for place_info in places_infos {
             println!("Place info: {:?}", place_info);
-            if place_info.1 {
-                let voxel = match Voxel::read(place_info.2) {
+            if place_info.online {
+                let voxel_id = place_info.voxel_id.parse::<i64>().unwrap();
+                let place_id = place_info.place_id.parse::<i64>().unwrap();
+                let voxel = match Voxel::read(voxel_id) {
                     Ok(voxel) => voxel,
                     Err(e) => {
                         eprintln!("Failed to read voxel: {}", e);
                         continue;
                     }
                 };
-                let place = Place::new(place_info.0, true, voxel);
+                let place = Place::new(place_id, true, place_info.cooldown, voxel);
                 let place_id = place.id;
                 let place_arc = Arc::new(place);
                 place_arc.voxel.start_save_loop();
@@ -46,6 +49,7 @@ impl AppState {
         Self {
             database: Arc::new(Mutex::new(database)),
             places,
+            last_update: 0,
         }
     }
 
@@ -83,24 +87,33 @@ impl AppState {
         }
     }
 
-    pub fn get_places_updates(&self) -> Vec<PlaceUserUpdate> {
+    pub fn get_places_updates(&mut self) -> Vec<PlaceUserUpdate> {
         let mut updates = Vec::new();
 
-        for (_, place) in self.places.iter() {
-            updates.extend(place.voxel.get_place_updates());
+        for (_, place) in self.places.iter_mut() {
+            let place_updates = place.get_place_updates();
+            for update in place_updates {
+                updates.push(update);
+            }
         }
 
         updates
     }
 
-    pub fn start_write_place_loop(&self) {
-        let updates = self.get_places_updates();
-        let database = Arc::clone(&self.database);
-
-        std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-            let db = database.lock().unwrap();
-            db.save_places_users(updates.clone()).unwrap();
-        });
+    pub fn places_updates(&mut self) {
+        let time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        if time - self.last_update > 5 {
+            self.last_update = time;
+            let updates = self.get_places_updates();
+            match self.database.lock().unwrap().save_places_users(updates) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("Failed to save updates: {}", e);
+                }
+            }
+        }
     }
 }

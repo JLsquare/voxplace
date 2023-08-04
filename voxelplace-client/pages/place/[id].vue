@@ -3,13 +3,13 @@
     <PlaceTopBar :text="infoBarText" class="absolute top-0 left-0"/>
     <canvas id="canvas" />
     <div class="flex absolute bottom-0 items-center justify-center mb-4 h-24 space-x-8">
-      <div id="color-controls" v-show="showPalette" class="bg-white py-2 px-4 overflow-hidden rounded-2xl border-2 border-black shadow-custom grid grid-rows-2 grid-flow-col gap-2">
-        <CloseButton size="32" class="order-last" @click="showPalette = false"/>
-      </div>
-      <div id="palette-btn" v-if="!showPalette" @click="showPalette = true" class="bg-white hover:bg-neutral-200 py-2 px-2 rounded-2xl border-2 border-black shadow-custom cursor-pointer">
-        <div id="selected-color" class="bg-white border border-1 border-black rounded-lg w-8 h-8"></div>
-      </div>
-      <Button text="Submit" id="edit-voxel-btn" class="bg-white hover:bg-neutral-200"/>
+      <PlacePalette
+          v-if="selectMesh != null"
+          :x="Math.floor(selectMesh.position.x + size / 2)"
+          :y="Math.floor(selectMesh.position.y + size / 2)"
+          :z="Math.floor(selectMesh.position.z + size / 2)"
+          @drawed="updateInfoBar"
+      />
     </div>
   </div>
 </template>
@@ -18,7 +18,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
-import PlaceTopBar from "~/components/PlaceTopBar.vue";
 
 const route = useRoute();
 const size = 128;
@@ -29,7 +28,6 @@ let camera;
 let renderer;
 let controls;
 let loader;
-let showPalette = ref(true);
 let infoBarText = ref('(0, 0, 0)   Empty / Server');
 
 const invertedBoxGeometry = new THREE.BoxGeometry(size, size, size);
@@ -64,12 +62,10 @@ onMounted(() => {
   init();
 })
 
-function init(){
-  console.log("test");
-
+async function init() {
   initScene();
-  initPalette();
-  initVoxelData();
+  await initPalette();
+  await initVoxelData();
   initSocket();
   addEventListeners();
 }
@@ -118,7 +114,6 @@ function initScene() {
   const borderMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.05 });
   const borderMesh = new THREE.Mesh(invertedBoxGeometry, borderMaterial);
   borderMesh.position.set(-0.5, -0.5, -0.5);
-  //disable raycast
   borderMesh.raycast = () => [];
   scene.add(borderMesh);
 
@@ -159,53 +154,22 @@ function initScene() {
   renderer.setSize(window.innerWidth, window.innerHeight);
 
   camera.position.set(size / 2, size / 2, size / 2);
-
-  const skyboxGeometry = new THREE.IcosahedronGeometry(1000, 4);
-  const skyboxMaterial = new THREE.MeshBasicMaterial( { map: createGradientTexture([[0.75,0.6,0.4,0.25], ['#1B1D1E','#3D4143','#72797D', '#b0babf']], 1024, 1024), side:THREE.BackSide, depthWrite: false }  );
-  const back = new THREE.Mesh( skyboxGeometry, skyboxMaterial);
-  //scene.add( back );
 }
 
-function initPalette() {
-  showPalette.value = true;
-
-  let colorControls = document.getElementById('color-controls');
-  palette = [
-    '#6d001a', '#be0039', '#ff4500', '#ffa800', '#ffd635', '#fff8b8',
-    '#00a368', '#00cc78', '#7eed56', '#00756f', '#009eaa', '#00ccc0',
-    '#2450a4', '#3690ea', '#51e9f4', '#493ac1', '#6a5cff', '#94b3ff',
-    '#811e9f', '#b44ac0', '#e4abff', '#de107f', '#ff3881', '#ff99aa',
-    '#6d482f', '#9c6926', '#ffb470', '#000000', '#515252', '#898d90',
-    '#d4d7d9', '#ffffff', 'empty'
-  ];
-
-  palette.forEach((color, index) => {
-    let input = document.createElement('input');
-    input.type = "radio";
-    input.id = "color" + index;
-    input.name = "color";
-    input.value = color;
-    input.classList.add("color-box", "hidden");
-    input.addEventListener('change', changeColor);
-
-    let label = document.createElement('label');
-    label.htmlFor = "color" + index;
-    if (color === 'empty') {
-      label.style.backgroundImage = "url('/remove.png')";
-      label.style.backgroundSize = 'cover';
-    } else {
-      label.style.backgroundColor = color;
-    }
-    label.classList.add("color-label", "w-8", "h-8", "border", "border-black", "border-1", "rounded-lg", "cursor-pointer", "hover:border-2");
-    label.addEventListener('click', () => {
-      showPalette.value = false;
-    });
-
-    colorControls.appendChild(input);
-    colorControls.appendChild(label);
+async function initPalette() {
+  const response = await fetch(`http://${window.location.hostname}:8000/api/place/palette/${route.params.id}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
   });
 
-  palette = palette.map(color => color === 'empty' ? 'empty' : new THREE.Color(color));
+  if (!response.ok) {
+    const message = await response.text();
+    console.log(message);
+  } else {
+    palette = await response.json();
+  }
 }
 
 async function initVoxelData() {
@@ -220,9 +184,9 @@ async function initVoxelData() {
             for(let z = 0; z < size; z++) {
               const value = bytes[x * size * size + y * size + z];
               if(value > 0) {
-                voxels[x][y][z] = palette[value - 1];
+                voxels[x][y][z] = value;
               } else {
-                voxels[x][y][z] = null;
+                voxels[x][y][z] = 0;
               }
             }
           }
@@ -268,13 +232,13 @@ function generateChunk(x, y, z) {
     for (let dy = 0; dy < chunkSize; dy++) {
       for (let dz = 0; dz < chunkSize; dz++) {
         const voxel = voxels[x + dx][y + dy][z + dz];
-        if (voxel !== null) {
-          let leftEmpty = x + dx - 1 < 0 || voxels[x + dx - 1][y + dy][z + dz] === null;
-          let rightEmpty = x + dx + 1 >= size || voxels[x + dx + 1][y + dy][z + dz] === null;
-          let bottomEmpty = y + dy - 1 < 0 || voxels[x + dx][y + dy - 1][z + dz] === null;
-          let topEmpty = y + dy + 1 >= size || voxels[x + dx][y + dy + 1][z + dz] === null;
-          let frontEmpty = z + dz - 1 < 0 || voxels[x + dx][y + dy][z + dz - 1] === null;
-          let backEmpty = z + dz + 1 >= size || voxels[x + dx][y + dy][z + dz + 1] === null;
+        if (voxel > 0) {
+          let leftEmpty = x + dx - 1 < 0 || voxels[x + dx - 1][y + dy][z + dz] === 0;
+          let rightEmpty = x + dx + 1 >= size || voxels[x + dx + 1][y + dy][z + dz] === 0;
+          let bottomEmpty = y + dy - 1 < 0 || voxels[x + dx][y + dy - 1][z + dz] === 0;
+          let topEmpty = y + dy + 1 >= size || voxels[x + dx][y + dy + 1][z + dz] === 0;
+          let frontEmpty = z + dz - 1 < 0 || voxels[x + dx][y + dy][z + dz - 1] === 0;
+          let backEmpty = z + dz + 1 >= size || voxels[x + dx][y + dy][z + dz + 1] === 0;
 
           if(leftEmpty){
             chunkVertices.push(
@@ -344,10 +308,11 @@ function generateChunk(x, y, z) {
 
           for(let i = 0; i < 6; i++) {
             if([leftEmpty, rightEmpty, bottomEmpty, topEmpty, frontEmpty, backEmpty][i]) {
-              chunkColors.push(voxel.r, voxel.g, voxel.b);
-              chunkColors.push(voxel.r, voxel.g, voxel.b);
-              chunkColors.push(voxel.r, voxel.g, voxel.b);
-              chunkColors.push(voxel.r, voxel.g, voxel.b);
+              let color = new THREE.Color(palette[voxel - 1])
+              chunkColors.push(color.r, color.g, color.b);
+              chunkColors.push(color.r, color.g, color.b);
+              chunkColors.push(color.r, color.g, color.b);
+              chunkColors.push(color.r, color.g, color.b);
             }
           }
         }
@@ -374,11 +339,7 @@ function animate() {
     for(let y = 0; y < size / chunkSize; y++) {
       for(let z = 0; z < size / chunkSize; z++) {
         if(chunks[x][y][z]) {
-          if(frustum.intersectsObject(chunks[x][y][z])){
-            chunks[x][y][z].visible = true;
-          } else {
-            chunks[x][y][z].visible = false;
-          }
+          chunks[x][y][z].visible = frustum.intersectsObject(chunks[x][y][z]);
         }
       }
     }
@@ -393,7 +354,6 @@ function addEventListeners() {
   document.addEventListener('mousemove', handleMouseMove, false);
   document.addEventListener('mousedown', handleMouseDown, false);
   document.addEventListener('mouseup', handleMouseUp, false);
-  document.getElementById('edit-voxel-btn').addEventListener('click', editVoxel, false);
 }
 
 function handleKeyDown(event) {
@@ -465,7 +425,7 @@ function handleMouseMove(event) {
       let y = Math.floor(leftClickPosition.y + (size / 2));
       let z = Math.floor(leftClickPosition.z + (size / 2));
 
-      if(leftClickPosition.y <= -size / 2 && voxels[x][y][z] === null) {
+      if(leftClickPosition.y <= -size / 2 && voxels[x][y][z] === 0) {
         rightClickPosition.y = -size / 2;
       }
 
@@ -511,8 +471,8 @@ async function handleMouseUp(event) {
       selectMesh.position.copy(previewRightClickMesh.position);
     }
 
-    let x = Math.round(selectMesh.position.x + size / 2 - 0.5);
-    let y = Math.round(selectMesh.position.y + size / 2 - 0.5);
+    let x = Math.floor(selectMesh.position.x + size / 2 - 0.5);
+    let y = Math.floor(selectMesh.position.y + size / 2 - 0.5);
     let z = Math.round(selectMesh.position.z + size / 2 - 0.5);
 
     let usernameRequest = {
@@ -531,7 +491,7 @@ async function handleMouseUp(event) {
     });
 
     const username = await response.json();
-    infoBarText.value = `(${x}, ${y}, ${z})   ${username}`
+    updateInfoBar(username);
   }
 
   if (clickCount === 0) {
@@ -548,12 +508,16 @@ async function handleMouseUp(event) {
   oldClick.copy(mouseUp);
 }
 
+function updateInfoBar(username){
+  let x = Math.floor(selectMesh.position.x + size / 2 - 0.5);
+  let y = Math.floor(selectMesh.position.y + size / 2 - 0.5);
+  let z = Math.round(selectMesh.position.z + size / 2 - 0.5);
+
+  infoBarText.value = `(${x}, ${y}, ${z})   ${username}`
+}
+
 function updateVoxel(x, y, z, color) {
-  if(color === 0){
-    voxels[x][y][z] = null;
-  } else {
-    voxels[x][y][z] = new THREE.Color(palette[color - 1]);
-  }
+  voxels[x][y][z] = color;
 
   let chunkX = Math.floor(x / chunkSize);
   let chunkY = Math.floor(y / chunkSize);
@@ -566,76 +530,6 @@ function updateVoxel(x, y, z, color) {
   if(x % chunkSize === chunkSize - 1 && chunkX < chunks.length - 1) needsUpdate[chunkX + 1][chunkY][chunkZ] = true;
   if(y % chunkSize === chunkSize - 1 && chunkY < chunks[0].length - 1) needsUpdate[chunkX][chunkY + 1][chunkZ] = true;
   if(z % chunkSize === chunkSize - 1 && chunkZ < chunks[0][0].length - 1) needsUpdate[chunkX][chunkY][chunkZ + 1] = true;
-}
-
-function changeColor() {
-  let colorInputs = document.querySelectorAll('input[name="color"]');
-  colorInputs.forEach(input => {
-    if(input.checked) {
-      selectedColor = input.value;
-      selectMesh.material.color.set(selectedColor);
-      previewLeftClickMesh.material.color.set(selectedColor);
-      previewRightClickMesh.material.color.set(selectedColor);
-    }
-  });
-}
-
-async function editVoxel() {
-  let x = Math.floor(selectMesh.position.x + size / 2);
-  let y = Math.floor(selectMesh.position.y + size / 2);
-  let z = Math.floor(selectMesh.position.z + size / 2);
-  let voxelvalue = 0;
-
-  for (let i = 0; i < palette.length - 1; i++) {
-    if ("#" + palette[i].getHexString() === selectedColor) {
-      voxelvalue = i + 1;
-      break;
-    }
-  }
-
-  let drawRequest = {
-    id: route.params.id,
-    x: x,
-    y: y,
-    z: z,
-    color: voxelvalue,
-  }
-
-  fetch(`http://${window.location.hostname}:8000/api/place/draw`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': localStorage.getItem('token'),
-    },
-    body: JSON.stringify(drawRequest)
-  })
-      .then(async response => {
-        if (response.ok) {
-          infoBarText.value = `(${x}, ${y}, ${z})   ${await response.json()}`
-
-          if (selectedColor === 'empty') {
-            voxels[x][y][z] = null;
-          } else {
-            voxels[x][y][z] = new THREE.Color(selectedColor);
-          }
-
-          let chunkX = Math.floor(x / chunkSize);
-          let chunkY = Math.floor(y / chunkSize);
-          let chunkZ = Math.floor(z / chunkSize);
-
-          updateChunk(chunkX, chunkY, chunkZ);
-          if (x % chunkSize === 0 && chunkX > 0) updateChunk(chunkX - 1, chunkY, chunkZ);
-          if (y % chunkSize === 0 && chunkY > 0) updateChunk(chunkX, chunkY - 1, chunkZ);
-          if (z % chunkSize === 0 && chunkZ > 0) updateChunk(chunkX, chunkY, chunkZ - 1);
-          if (x % chunkSize === chunkSize - 1 && chunkX < chunks.length - 1) updateChunk(chunkX + 1, chunkY, chunkZ);
-          if (y % chunkSize === chunkSize - 1 && chunkY < chunks[0].length - 1) updateChunk(chunkX, chunkY + 1, chunkZ);
-          if (z % chunkSize === chunkSize - 1 && chunkZ < chunks[0][0].length - 1) updateChunk(chunkX, chunkY, chunkZ + 1);
-        } else {
-          return response.text().then(text => {
-            console.log("Draw error: " + response.status + " " + text);
-          });
-        }
-      });
 }
 
 function updateChunk(chunkX, chunkY, chunkZ) {
@@ -654,7 +548,6 @@ function updateWhenNeeded(count=0, limit=64) {
         if(needsUpdate[xUpdate][yUpdate][zUpdate]) {
           updateChunk(xUpdate, yUpdate, zUpdate);
           needsUpdate[xUpdate][yUpdate][zUpdate] = false;
-          console.log("Updated chunk " + xUpdate + ", " + yUpdate + ", " + zUpdate);
         } else {
           updated = true;
         }
@@ -676,26 +569,5 @@ function updateWhenNeeded(count=0, limit=64) {
       updateWhenNeeded(count + 1);
     }
   }
-}
-
-function createGradientTexture(colorStops, width=16, height=1024) {
-  const canvas = document.createElement("canvas");
-  const context = canvas.getContext("2d");
-  canvas.width = width;
-  canvas.height = height;
-
-  const gradient = context.createLinearGradient(0, 0, 0, height);
-
-  for(let i = 0; i < colorStops[0].length; i++){
-    gradient.addColorStop(colorStops[0][i], colorStops[1][i]);
-  }
-
-  context.fillStyle = gradient;
-  context.fillRect(0, 0, width, height);
-
-  const texture = new THREE.Texture(canvas);
-  texture.needsUpdate = true;
-
-  return texture;
 }
 </script>

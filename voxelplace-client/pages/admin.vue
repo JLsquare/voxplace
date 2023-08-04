@@ -34,7 +34,7 @@ onMounted(() => {
 });
 
 async function testToken() {
-  const token = localStorage.getItem('admin-token');
+  const token = localStorage.getItem('token');
 
   if (token) {
     const decodedToken = jwtDecode(token);
