@@ -1,7 +1,7 @@
 <template>
   <div class="bg-blue-300 w-full h-16 flex justify-between items-center border-b-2 border-black">
     <div class="ml-8 w-96">
-      <p class="text-3xl">voxelplace. admin</p>
+      <p class="text-3xl">voxplace. [indev] admin</p>
     </div>
     <div v-show="isAuth" class="relative w-auto h-10 flex justify-center items-center">
       <div class="flex space-x-10 lg:space-x-20 items-center">

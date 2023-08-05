@@ -10,9 +10,12 @@ impl Database {
                 username TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
                 email TEXT NOT NULL,
+                voxel_id INTEGER NOT NULL,
+                xp INTEGER NOT NULL DEFAULT 0,
                 created_at DATETIME NOT NULL,
                 last_connected_at DATETIME NOT NULL,
                 admin INTEGER NOT NULL DEFAULT 0
+                FOREIGN KEY (voxel_id) REFERENCES Voxel (voxel_id)
             )",
             [],
         )?;
@@ -24,6 +27,7 @@ impl Database {
         &self,
         username: &str,
         email: &str,
+        voxel_id: i64,
         password_hash: &str,
         created_at: i64,
         last_connected_at: i64,
@@ -34,6 +38,7 @@ impl Database {
                 username,
                 password_hash,
                 email,
+                voxel_id,
                 created_at,
                 last_connected_at
             ) VALUES (?, ?, ?, ?, ?)",
