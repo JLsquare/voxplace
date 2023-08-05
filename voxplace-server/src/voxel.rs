@@ -220,8 +220,7 @@ impl Voxel {
         Ok(())
     }
 
-    pub fn read(id: i64) -> Result<Voxel, std::io::Error> {
-        let path = format!("voxels/{}.vxl", id);
+    pub fn read(path: &str, id: i64) -> Result<Voxel, std::io::Error> {
         let file = File::open(path)?;
         let mut reader = std::io::BufReader::new(file);
 

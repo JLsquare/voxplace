@@ -90,14 +90,13 @@ async function sendVoxel() {
   let colorIndex = selectedColor.value === 'remove' ? 0 : palette.value.indexOf(selectedColor.value) + 1;
 
   let drawRequest = {
-    id: route.params.id,
     x: props.x,
     y: props.y,
     z: props.z,
     color: colorIndex,
   }
 
-  fetch(`http://${window.location.hostname}:8000/api/place/draw`, {
+  fetch(`http://${window.location.hostname}:8000/api/place/draw/${route.params.id}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -476,13 +476,12 @@ async function handleMouseUp(event) {
     let z = Math.round(selectMesh.position.z + size / 2 - 0.5);
 
     let usernameRequest = {
-      id: route.params.id,
       x: x,
       y: y,
       z: z
     }
 
-    const response = await fetch(`http://${window.location.hostname}:8000/api/place/username`, {
+    const response = await fetch(`http://${window.location.hostname}:8000/api/place/username/${route.params.id}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

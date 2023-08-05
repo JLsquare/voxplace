@@ -18,7 +18,6 @@ use std::sync::RwLock;
 
 #[derive(Deserialize)]
 struct DrawRequest {
-    id: String,
     x: usize,
     y: usize,
     z: usize,
@@ -27,7 +26,6 @@ struct DrawRequest {
 
 #[derive(Deserialize)]
 struct UsernameRequest {
-    id: String,
     x: usize,
     y: usize,
     z: usize,
@@ -70,30 +68,47 @@ struct Claims {
 async fn ws_index(
     req: HttpRequest,
     stream: Payload,
-    state: Data<RwLock<AppState>>,
+    data: Data<RwLock<AppState>>,
     path: Path<String>,
-) -> Result<HttpResponse, Error> {
-    let id = path.into_inner().parse::<i64>().unwrap();
-    let app_state = state.read().unwrap();
+) -> HttpResponse {
+    let id = match path.into_inner().parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => return HttpResponse::BadRequest().body("Invalid place"),
+    };
+
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
 
     let place = match app_state.places.get(&id) {
         Some(place) => place,
-        None => return Err(actix_web::error::ErrorNotFound("No such place")),
+        None => return HttpResponse::BadRequest().body("Invalid place"),
     };
 
-    ws::start(
+    match ws::start(
         PlaceWebSocketConnection {
             place: place.clone(),
         },
         &req,
         stream,
-    )
+    ) {
+        Ok(response) => response,
+        Err(_) => HttpResponse::InternalServerError().body("Failed to start websocket"),
+    }
 }
 
 #[get("/api/place/all/{id}")]
 async fn get_grid(data: Data<RwLock<AppState>>, path: Path<String>) -> impl Responder {
-    let id = path.into_inner().parse::<i64>().unwrap();
-    let app_state = data.read().unwrap();
+    let id = match path.into_inner().parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => return HttpResponse::BadRequest().body("Invalid place"),
+    };
+
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
 
     let place = match app_state.places.get(&id) {
         Some(place) => place,
@@ -103,8 +118,58 @@ async fn get_grid(data: Data<RwLock<AppState>>, path: Path<String>) -> impl Resp
     let grid: Vec<u8> = place.voxel.grid.iter().map(|cell| cell.load()).collect();
 
     let mut e = GzEncoder::new(Vec::new(), Compression::default());
-    e.write_all(&grid).expect("Failed to write data");
-    let compressed_data = e.finish().expect("Failed to finish compression");
+    match e.write_all(&grid) {
+        Ok(_) => (),
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to compress data"),
+    };
+
+    let compressed_data = match e.finish() {
+        Ok(data) => data,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to compress data"),
+    };
+
+    HttpResponse::Ok()
+        .append_header((header::CONTENT_ENCODING, "gzip"))
+        .body(compressed_data)
+}
+
+#[get("/api/voxel/all/{id}")]
+async fn get_voxel(
+    data: Data<RwLock<AppState>>,
+    path: Path<String>
+) -> impl Responder {
+    let id = match path.into_inner().parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => return HttpResponse::BadRequest().body("Invalid place"),
+    };
+
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
+
+    let voxel_info = match app_state.database.lock().unwrap().get_voxel_info(id) {
+        Ok(info) => info,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel info"),
+    };
+
+    let voxel = match Voxel::read(&voxel_info.path, voxel_info.voxel_id) {
+        Ok(voxel) => voxel,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel"),
+    };
+
+    let grid: Vec<u8> = voxel.grid.iter().map(|cell| cell.load()).collect();
+
+    let mut e = GzEncoder::new(Vec::new(), Compression::default());
+    match e.write_all(&grid) {
+        Ok(_) => (),
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to compress data"),
+    };
+
+    let compressed_data = match e.finish() {
+        Ok(data) => data,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to compress data"),
+    };
 
     HttpResponse::Ok()
         .append_header((header::CONTENT_ENCODING, "gzip"))
@@ -113,8 +178,15 @@ async fn get_grid(data: Data<RwLock<AppState>>, path: Path<String>) -> impl Resp
 
 #[get("/api/place/palette/{id}")]
 async fn get_palette(data: Data<RwLock<AppState>>, path: Path<String>) -> impl Responder {
-    let id = path.into_inner().parse::<i64>().unwrap();
-    let app_state = data.read().unwrap();
+    let id = match path.into_inner().parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => return HttpResponse::BadRequest().body("Invalid place"),
+    };
+
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
 
     let place = match app_state.places.get(&id) {
         Some(place) => place,
@@ -129,21 +201,54 @@ async fn get_palette(data: Data<RwLock<AppState>>, path: Path<String>) -> impl R
     HttpResponse::Ok().json(palette_hex)
 }
 
+#[get("/api/voxel/palette/{id}")]
+async fn get_voxel_palette(data: Data<RwLock<AppState>>, path: Path<String>) -> impl Responder {
+    let id = match path.into_inner().parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => return HttpResponse::BadRequest().body("Invalid voxel"),
+    };
 
-#[post("/api/place/draw")]
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
+
+    let voxel_info = match app_state.database.lock().unwrap().get_voxel_info(id) {
+        Ok(info) => info,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel info"),
+    };
+
+    let voxel = match Voxel::read(&voxel_info.path, voxel_info.voxel_id) {
+        Ok(voxel) => voxel,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel"),
+    };
+
+    let palette_hex: Vec<String> = voxel.palette
+        .iter()
+        .map(|&(r, g, b)| format!("#{:02x}{:02x}{:02x}", r, g, b))
+        .collect();
+
+    HttpResponse::Ok().json(palette_hex)
+}
+
+#[post("/api/place/draw/{id}")]
 async fn draw_voxel_http(
     data: Data<RwLock<AppState>>,
     req: HttpRequest,
     json: Json<DrawRequest>,
+    path: Path<String>,
 ) -> impl Responder {
-    let mut app_state = data.write().unwrap();
-
-    let place_id = match json.id.parse::<i64>() {
+    let id = match path.into_inner().parse::<i64>() {
         Ok(id) => id,
         Err(_) => return HttpResponse::BadRequest().body("Invalid place"),
     };
 
-    let place = match app_state.places.get(&place_id) {
+    let mut app_state = match data.write() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
+
+    let place = match app_state.places.get(&id) {
         Some(place) => place,
         None => return HttpResponse::BadRequest().body("Invalid place"),
     };
@@ -167,7 +272,7 @@ async fn draw_voxel_http(
         Err(_) => return HttpResponse::Unauthorized().body("Invalid token"),
     };
 
-    let cooldown = match app_state.database.lock().unwrap().get_user_cooldown(place_id, user_id) {
+    let cooldown = match app_state.database.lock().unwrap().get_user_cooldown(id, user_id) {
         Ok(cooldown) => cooldown,
         Err(_) => 0,
     };
@@ -181,7 +286,7 @@ async fn draw_voxel_http(
         return HttpResponse::BadRequest().body("Cooldown not finished");
     }
 
-    match app_state.database.lock().unwrap().set_user_cooldown(place_id, user_id, time + place.cooldown) {
+    match app_state.database.lock().unwrap().set_user_cooldown(id, user_id, time + place.cooldown) {
         Ok(_) => (),
         Err(_) => return HttpResponse::InternalServerError().body("Failed to set cooldown"),
     }
@@ -216,9 +321,15 @@ async fn get_cooldown(
     req: HttpRequest,
     path: Path<String>,
 ) -> impl Responder {
-    let id = path.into_inner().parse::<i64>().unwrap();
+    let id = match path.into_inner().parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => return HttpResponse::BadRequest().body("Invalid place"),
+    };
 
-    let app_state = data.write().unwrap();
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
 
     let token = match req.headers().get("Authorization") {
         Some(token) => token,
@@ -260,17 +371,24 @@ async fn get_places_info(data: Data<RwLock<AppState>>) -> impl Responder {
     HttpResponse::Ok().json(places_infos)
 }
 
-#[post("/api/place/username")]
-async fn get_username(data: Data<RwLock<AppState>>, json: Json<UsernameRequest>) -> impl Responder {
-    let app_state = data.read().unwrap();
-
-    let place_id = match json.id.parse::<i64>() {
+#[post("/api/place/username/{id}")]
+async fn get_username(
+    data: Data<RwLock<AppState>>,
+    json: Json<UsernameRequest>,
+    path: Path<String>,
+) -> impl Responder {
+    let id = match path.into_inner().parse::<i64>() {
         Ok(id) => id,
         Err(_) => return HttpResponse::BadRequest().body("Invalid place"),
     };
 
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
+
     let user_id = match app_state.database.lock().unwrap().get_place_user(
-        place_id,
+        id,
         json.x as i64,
         json.y as i64,
         json.z as i64,

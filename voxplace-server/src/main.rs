@@ -7,7 +7,7 @@ mod websocket;
 
 use crate::app_state::AppState;
 use crate::database::db::Database;
-use crate::routes::{check_admin, create_place, draw_voxel_http, get_cooldown, get_grid, get_palette, get_places_info, get_username, login_user, register_user, ws_index};
+use crate::routes::{check_admin, create_place, draw_voxel_http, get_cooldown, get_grid, get_palette, get_places_info, get_username, get_voxel, get_voxel_palette, login_user, register_user, ws_index};
 use actix_cors::Cors;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer};
@@ -42,6 +42,8 @@ async fn main() -> std::io::Result<()> {
             .service(create_place)
             .service(get_palette)
             .service(get_cooldown)
+            .service(get_voxel)
+            .service(get_voxel_palette)
     })
     .bind("0.0.0.0:8000")?
     .run()

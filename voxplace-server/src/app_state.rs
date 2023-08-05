@@ -31,7 +31,16 @@ impl AppState {
             if place_info.online {
                 let voxel_id = place_info.voxel_id.parse::<i64>().unwrap();
                 let place_id = place_info.place_id.parse::<i64>().unwrap();
-                let voxel = match Voxel::read(voxel_id) {
+
+                let voxel_info = match database.get_voxel_info(voxel_id) {
+                    Ok(voxel_info) => voxel_info,
+                    Err(e) => {
+                        eprintln!("Failed to get voxel info: {}", e);
+                        continue;
+                    }
+                };
+
+                let voxel = match Voxel::read(&voxel_info.path, voxel_info.voxel_id) {
                     Ok(voxel) => voxel,
                     Err(e) => {
                         eprintln!("Failed to read voxel: {}", e);
