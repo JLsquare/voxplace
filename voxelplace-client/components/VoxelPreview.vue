@@ -1,6 +1,6 @@
 <template>
-  <div id="parent" class="rounded-2xl h-full w-full">
-    <canvas id="canvas" class="rounded-2xl" />
+  <div ref="parentRef" class="rounded-2xl h-full w-full">
+    <canvas ref="canvasRef" class="rounded-2xl" />
   </div>
 </template>
 
@@ -11,6 +11,9 @@ const props = defineProps({
     default: '0'
   }
 })
+
+const parentRef = ref(null);
+const canvasRef = ref(null);
 
 import * as THREE from 'three';
 
@@ -47,8 +50,8 @@ async function init() {
 function initScene() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xffffff);
-  let canvas = document.querySelector('#canvas')
-  let parent = document.querySelector('#parent')
+  let canvas = canvasRef.value;
+  let parent = parentRef.value;
   camera = new THREE.PerspectiveCamera(75, parent.offsetWidth / parent.offsetHeight, 0.1, 2000);
   renderer = new THREE.WebGLRenderer({
     antialias: true,
