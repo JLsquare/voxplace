@@ -1,12 +1,23 @@
 use crate::database::db::Database;
 use bcrypt::verify;
 use rusqlite::{params, Error};
+use serde_derive::Serialize;
+
+#[derive(Serialize)]
+pub struct UserProfile {
+    pub user_id: String,
+    pub username: String,
+    pub voxel_id: String,
+    pub xp: i64,
+    pub created_at: i64,
+    pub last_connected_at: i64,
+}
 
 impl Database {
     pub fn create_user_table(&self) -> Result<(), Error> {
         self.conn.lock().unwrap().execute(
             "CREATE TABLE IF NOT EXISTS User (
-                user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER PRIMARY KEY,
                 username TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
                 email TEXT NOT NULL,
@@ -15,7 +26,6 @@ impl Database {
                 created_at DATETIME NOT NULL,
                 last_connected_at DATETIME NOT NULL,
                 admin INTEGER NOT NULL DEFAULT 0
-                FOREIGN KEY (voxel_id) REFERENCES Voxel (voxel_id)
             )",
             [],
         )?;
@@ -25,6 +35,7 @@ impl Database {
 
     pub fn register_user(
         &self,
+        user_id: i64,
         username: &str,
         email: &str,
         voxel_id: i64,
@@ -35,18 +46,21 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "INSERT OR REPLACE INTO User (
+                user_id,
                 username,
                 password_hash,
                 email,
                 voxel_id,
                 created_at,
                 last_connected_at
-            ) VALUES (?, ?, ?, ?, ?)",
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )?;
         stmt.execute(params![
+            user_id,
             username,
             password_hash,
             email,
+            voxel_id,
             created_at,
             last_connected_at
         ])?;
@@ -127,6 +141,42 @@ impl Database {
         if let Some(row) = rows.next()? {
             let username: String = row.get(0)?;
             Ok(username)
+        } else {
+            Err(Error::QueryReturnedNoRows)
+        }
+    }
+
+    pub fn get_xp(&self, user_id: i64) -> Result<i64, Error> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT xp FROM User WHERE user_id = ?")?;
+        let mut rows = stmt.query(params![user_id])?;
+        if let Some(row) = rows.next()? {
+            let xp: i64 = row.get(0)?;
+            Ok(xp)
+        } else {
+            Err(Error::QueryReturnedNoRows)
+        }
+    }
+
+    pub fn get_user_profile(&self, user_id: i64) -> Result<UserProfile, Error> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT user_id, username, voxel_id, xp, created_at, last_connected_at FROM User WHERE user_id = ?")?;
+        let mut rows = stmt.query(params![user_id])?;
+        if let Some(row) = rows.next()? {
+            let user_id: i64 = row.get(0)?;
+            let username: String = row.get(1)?;
+            let voxel_id: i64 = row.get(2)?;
+            let xp: i64 = row.get(3)?;
+            let created_at: i64 = row.get(4)?;
+            let last_connected_at: i64 = row.get(5)?;
+            Ok(UserProfile {
+                user_id: user_id.to_string(),
+                username,
+                voxel_id: voxel_id.to_string(),
+                xp,
+                created_at,
+                last_connected_at,
+            })
         } else {
             Err(Error::QueryReturnedNoRows)
         }

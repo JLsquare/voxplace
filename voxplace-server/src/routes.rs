@@ -4,7 +4,7 @@ use crate::voxel::Voxel;
 use crate::websocket::PlaceWebSocketConnection;
 use actix_web::http::header;
 use actix_web::web::{Data, Json, Path, Payload};
-use actix_web::{get, post, Error, HttpRequest, HttpResponse, Responder};
+use actix_web::{get, post, HttpRequest, HttpResponse, Responder};
 use actix_web_actors::ws;
 use bcrypt::{hash, DEFAULT_COST};
 use chrono::{Duration, Utc};
@@ -60,7 +60,7 @@ struct DrawResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
-    sub: i64,
+    sub: String,
     exp: usize,
 }
 
@@ -99,7 +99,10 @@ async fn ws_index(
 }
 
 #[get("/api/place/all/{id}")]
-async fn get_grid(data: Data<RwLock<AppState>>, path: Path<String>) -> impl Responder {
+async fn get_grid(
+    data: Data<RwLock<AppState>>,
+    path: Path<String>
+) -> impl Responder {
     let id = match path.into_inner().parse::<i64>() {
         Ok(id) => id,
         Err(_) => return HttpResponse::BadRequest().body("Invalid place"),
@@ -148,7 +151,12 @@ async fn get_voxel(
         Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
     };
 
-    let voxel_info = match app_state.database.lock().unwrap().get_voxel_info(id) {
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read database"),
+    };
+
+    let voxel_info = match db.get_voxel_info(id) {
         Ok(info) => info,
         Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel info"),
     };
@@ -177,7 +185,10 @@ async fn get_voxel(
 }
 
 #[get("/api/place/palette/{id}")]
-async fn get_palette(data: Data<RwLock<AppState>>, path: Path<String>) -> impl Responder {
+async fn get_palette(
+    data: Data<RwLock<AppState>>,
+    path: Path<String>
+) -> impl Responder {
     let id = match path.into_inner().parse::<i64>() {
         Ok(id) => id,
         Err(_) => return HttpResponse::BadRequest().body("Invalid place"),
@@ -202,7 +213,10 @@ async fn get_palette(data: Data<RwLock<AppState>>, path: Path<String>) -> impl R
 }
 
 #[get("/api/voxel/palette/{id}")]
-async fn get_voxel_palette(data: Data<RwLock<AppState>>, path: Path<String>) -> impl Responder {
+async fn get_voxel_palette(
+    data: Data<RwLock<AppState>>,
+    path: Path<String>
+) -> impl Responder {
     let id = match path.into_inner().parse::<i64>() {
         Ok(id) => id,
         Err(_) => return HttpResponse::BadRequest().body("Invalid voxel"),
@@ -213,7 +227,12 @@ async fn get_voxel_palette(data: Data<RwLock<AppState>>, path: Path<String>) -> 
         Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
     };
 
-    let voxel_info = match app_state.database.lock().unwrap().get_voxel_info(id) {
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read database"),
+    };
+
+    let voxel_info = match db.get_voxel_info(id) {
         Ok(info) => info,
         Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel info"),
     };
@@ -253,50 +272,45 @@ async fn draw_voxel_http(
         None => return HttpResponse::BadRequest().body("Invalid place"),
     };
 
-    let token = match req.headers().get("Authorization") {
-        Some(token) => token,
-        None => return HttpResponse::Unauthorized().body("No token provided"),
+    let user_id = match check_user(req) {
+        Ok(id) => id,
+        Err(res) => return res,
     };
 
-    let token_str = match token.to_str() {
-        Ok(t) => t,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to parse token"),
+    let time = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        Ok(time) => time.as_secs() as i64,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to get time"),
     };
 
-    let user_id = match decode::<Claims>(
-        &token_str,
-        &DecodingKey::from_secret("secret".as_bytes()),
-        &Validation::new(Algorithm::HS256),
-    ) {
-        Ok(c) => c.claims.sub,
-        Err(_) => return HttpResponse::Unauthorized().body("Invalid token"),
-    };
+    let mut username = String::new();
 
-    let cooldown = match app_state.database.lock().unwrap().get_user_cooldown(id, user_id) {
-        Ok(cooldown) => cooldown,
-        Err(_) => 0,
-    };
+    {
+        let db = match app_state.database.lock() {
+            Ok(db) => db,
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to read database"),
+        };
 
-    let time = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
+        let cooldown = match db.get_user_cooldown(id, user_id) {
+            Ok(cooldown) => cooldown,
+            Err(_) => 0,
+        };
 
-    if cooldown > time {
-        return HttpResponse::BadRequest().body("Cooldown not finished");
-    }
+        if cooldown > time {
+            return HttpResponse::BadRequest().body("Cooldown not finished");
+        }
 
-    match app_state.database.lock().unwrap().set_user_cooldown(id, user_id, time + place.cooldown) {
-        Ok(_) => (),
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to set cooldown"),
+        match db.set_user_cooldown(id, user_id, time + place.cooldown) {
+            Ok(_) => (),
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to set cooldown"),
+        }
+
+        username = match db.get_username(user_id) {
+            Ok(username) => username,
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to get username"),
+        };
     }
 
     let cooldown = place.cooldown.clone();
-
-    let username = match app_state.database.lock().unwrap().get_username(user_id) {
-        Ok(username) => username,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to get username"),
-    };
 
     match place.voxel.draw_voxel(json.x, json.y, json.z, json.color) {
         Ok(_) => (),
@@ -326,31 +340,22 @@ async fn get_cooldown(
         Err(_) => return HttpResponse::BadRequest().body("Invalid place"),
     };
 
+    let user_id = match check_user(req) {
+        Ok(id) => id,
+        Err(res) => return res,
+    };
+
     let app_state = match data.read() {
         Ok(state) => state,
         Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
     };
 
-    let token = match req.headers().get("Authorization") {
-        Some(token) => token,
-        None => return HttpResponse::Unauthorized().body("No token provided"),
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read database"),
     };
 
-    let token_str = match token.to_str() {
-        Ok(t) => t,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to parse token"),
-    };
-
-    let user_id = match decode::<Claims>(
-        &token_str,
-        &DecodingKey::from_secret("secret".as_bytes()),
-        &Validation::new(Algorithm::HS256),
-    ) {
-        Ok(c) => c.claims.sub,
-        Err(_) => return HttpResponse::Unauthorized().body("Invalid token"),
-    };
-
-    let cooldown = match app_state.database.lock().unwrap().get_user_cooldown(id, user_id) {
+    let cooldown = match db.get_user_cooldown(id, user_id) {
         Ok(cooldown) => cooldown,
         Err(_) => 0,
     };
@@ -360,10 +365,20 @@ async fn get_cooldown(
 
 
 #[get("/api/place/infos")]
-async fn get_places_info(data: Data<RwLock<AppState>>) -> impl Responder {
-    let app_state = data.read().unwrap();
+async fn get_places_info(
+    data: Data<RwLock<AppState>>
+) -> impl Responder {
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
 
-    let places_infos = match app_state.database.lock().unwrap().get_places_infos() {
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read database"),
+    };
+
+    let places_infos = match db.get_places_infos() {
         Ok(places_infos) => places_infos,
         Err(_) => return HttpResponse::InternalServerError().body("Failed to get places infos"),
     };
@@ -387,7 +402,12 @@ async fn get_username(
         Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
     };
 
-    let user_id = match app_state.database.lock().unwrap().get_place_user(
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to get database"),
+    };
+
+    let user_id = match db.get_place_user(
         id,
         json.x as i64,
         json.y as i64,
@@ -397,7 +417,7 @@ async fn get_username(
         Err(_) => return HttpResponse::Ok().json("Empty / Server"),
     };
 
-    let username = match app_state.database.lock().unwrap().get_username(user_id) {
+    let username = match db.get_username(user_id) {
         Ok(username) => username,
         Err(_) => return HttpResponse::Ok().json(user_id.to_string()),
     };
@@ -406,57 +426,73 @@ async fn get_username(
 }
 
 #[get("/api/user/checkadmin")]
-async fn check_admin(data: Data<RwLock<AppState>>, req: HttpRequest) -> impl Responder {
-    let app_state = data.read().unwrap();
-
-    let token = match req.headers().get("Authorization") {
-        Some(token) => token,
-        None => return HttpResponse::Unauthorized().body("No token provided"),
+async fn check_admin(
+    data: Data<RwLock<AppState>>,
+    req: HttpRequest
+) -> impl Responder {
+    let user_id = match check_user(req) {
+        Ok(id) => id,
+        Err(res) => return res,
     };
 
-    let token_str = match token.to_str() {
-        Ok(t) => t,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to parse token"),
-    };
-
-    let user_id = match decode::<Claims>(
-        &token_str,
-        &DecodingKey::from_secret("secret".as_bytes()),
-        &Validation::new(Algorithm::HS256),
-    ) {
-        Ok(c) => c.claims.sub,
-        Err(_) => return HttpResponse::Unauthorized().body("Invalid token"),
-    };
-
-    let is_admin = match app_state.database.lock().unwrap().is_admin(user_id) {
+    let is_admin = match check_user_admin(user_id, &data) {
         Ok(is_admin) => is_admin,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to check admin"),
+        Err(res) => return res,
     };
 
     HttpResponse::Ok().json(is_admin)
 }
 
 #[post("/api/user/register")]
-async fn register_user(data: Data<RwLock<AppState>>, req: Json<RegisterRequest>) -> impl Responder {
-    let app_state = data.read().unwrap();
-
-    let password_hash = hash(&req.password, DEFAULT_COST).unwrap();
+async fn register_user(
+    data: Data<RwLock<AppState>>,
+    req: Json<RegisterRequest>
+) -> impl Responder {
+    let password_hash = match hash(&req.password, DEFAULT_COST) {
+        Ok(hash) => hash,
+        Err(_) => return HttpResponse::InternalServerError().json("Failed to hash password"),
+    };
 
     let created_at = Utc::now().timestamp();
 
-    let user_id = match app_state.database.lock().unwrap().register_user(
+    let user_id = thread_rng().gen::<i64>();
+    let voxel_id = thread_rng().gen::<i64>();
+    let voxel_name = format!("{}'s voxel", req.username);
+
+    let mut app_state = match data.write() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().json("Failed to read app state"),
+    };
+
+    let voxel = Voxel::new(voxel_id, &voxel_name, None, (8, 8, 8), None);
+
+    match voxel.write(&voxel.path) {
+        Ok(_) => (),
+        Err(_) => return HttpResponse::InternalServerError().json("Failed to write voxel"),
+    }
+
+    app_state.add_voxel(voxel);
+
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().json("Failed to lock database"),
+    };
+
+    match db.register_user(
+        user_id,
         &req.username,
         &req.email,
+        voxel_id,
         &password_hash,
         created_at,
         created_at,
     ) {
-        Ok(user_id) => user_id,
-        Err(_) => return HttpResponse::InternalServerError().json("Failed to register user"),
+        Ok(_) => (),
+        Err(e) => return HttpResponse::InternalServerError().json(format!("Failed to register user : {}", e)),
     };
 
     let claim = Claims {
-        sub: user_id,
+        sub: user_id.to_string(),
         exp: (Utc::now() + Duration::hours(24)).timestamp() as usize,
     };
 
@@ -471,34 +507,35 @@ async fn register_user(data: Data<RwLock<AppState>>, req: Json<RegisterRequest>)
 }
 
 #[post("/api/user/login")]
-async fn login_user(data: Data<RwLock<AppState>>, req: Json<LoginRequest>) -> impl Responder {
-    let app_state = data.read().unwrap();
+async fn login_user(
+    data: Data<RwLock<AppState>>,
+    req: Json<LoginRequest>
+) -> impl Responder {
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
 
     let last_connected_at = Utc::now().timestamp();
 
-    let result = app_state
-        .database
-        .lock()
-        .unwrap()
-        .login_user(&req.username, &req.password);
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to lock database"),
+    };
 
-    let user_id = match result {
+    let user_id = match db.login_user(&req.username, &req.password) {
         Ok(user_id) => user_id,
         Err(_) => return HttpResponse::Unauthorized().body("Invalid username or password"),
     };
 
-    match app_state
-        .database
-        .lock()
-        .unwrap()
-        .update_last_connected_at(user_id, last_connected_at)
+    match db.update_last_connected_at(user_id, last_connected_at)
     {
         Ok(_) => (),
         Err(_) => eprintln!("Failed to update last connected at for user {}", user_id),
     };
 
     let claim = Claims {
-        sub: user_id,
+        sub: user_id.to_string(),
         exp: (Utc::now() + Duration::hours(24)).timestamp() as usize,
     };
 
@@ -512,6 +549,45 @@ async fn login_user(data: Data<RwLock<AppState>>, req: Json<LoginRequest>) -> im
     HttpResponse::Ok().json(token)
 }
 
+#[get("/api/user/profile/{id}")]
+async fn get_user_profile(
+    data: Data<RwLock<AppState>>,
+    path: Path<String>,
+    req: HttpRequest,
+) -> impl Responder {
+    let mut user_id = 0;
+    let path = path.into_inner();
+
+    if(path == "me") {
+        user_id = match check_user(req) {
+            Ok(id) => id,
+            Err(res) => return res,
+        };
+    } else {
+        user_id = match path.parse::<i64>() {
+            Ok(id) => id,
+            Err(_) => return HttpResponse::BadRequest().body("Invalid id"),
+        };
+    }
+
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
+
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to lock database"),
+    };
+
+    let user_profile = match db.get_user_profile(user_id) {
+        Ok(user_profile) => user_profile,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to get user profile"),
+    };
+
+    HttpResponse::Ok().json(user_profile)
+}
+
 #[post("/api/place/create")]
 async fn create_place(
     data: Data<RwLock<AppState>>,
@@ -519,41 +595,85 @@ async fn create_place(
     req: HttpRequest,
 ) -> impl Responder {
     {
-        let app_state = data.read().unwrap();
-
-        let token = match req.headers().get("Authorization") {
-            Some(token) => token,
-            None => return HttpResponse::Unauthorized().body("No token provided"),
+        let user_id = match check_user(req) {
+            Ok(user_id) => user_id,
+            Err(res) => return res,
         };
 
-        let token_str = match token.to_str() {
-            Ok(t) => t,
-            Err(_) => return HttpResponse::InternalServerError().body("Failed to parse token"),
+        let is_admin = match check_user_admin(user_id, &data) {
+            Ok(is_admin) => is_admin,
+            Err(res) => return res,
         };
 
-        let user_id = match decode::<Claims>(
-            &token_str,
-            &DecodingKey::from_secret("secret".as_bytes()),
-            &Validation::new(Algorithm::HS256),
-        ) {
-            Ok(c) => c.claims.sub,
-            Err(_) => return HttpResponse::Unauthorized().body("Invalid token"),
-        };
-
-        match app_state.database.lock().unwrap().is_admin(user_id) {
-            Ok(_) => (),
-            Err(_) => return HttpResponse::InternalServerError().body("Failed to check admin"),
-        };
+        if !is_admin {
+            return HttpResponse::Unauthorized().body("You are not an admin");
+        }
     }
 
     let voxel_id = thread_rng().gen::<i64>();
     let place_id = thread_rng().gen::<i64>();
 
-    let mut app_state = data.write().unwrap();
+    let mut app_state = match data.write() {
+        Ok(app_state) => app_state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to lock app state"),
+    };
+
     let voxel = Voxel::new(voxel_id, &json.name, None, json.size, None);
-    voxel.write().unwrap();
+
+    match voxel.write(&voxel.path) {
+        Ok(_) => (),
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to write voxel"),
+    };
+
     let place = Place::new(place_id, true, json.cooldown as i64, voxel);
     app_state.add_place(place);
 
     HttpResponse::Ok().json("ok")
+}
+
+fn check_user(req: HttpRequest) -> Result<i64, HttpResponse> {
+    let header = match req.headers().get("Authorization") {
+        Some(header) => header,
+        None => return Err(HttpResponse::Unauthorized().body("No token provided")),
+    };
+
+    let token = match header.to_str() {
+        Ok(token) => token,
+        Err(_) => return Err(HttpResponse::Unauthorized().body("No token provided")),
+    };
+
+    let user_id_str = match decode::<Claims>(
+        &token,
+        &DecodingKey::from_secret("secret".as_bytes()),
+        &Validation::new(Algorithm::HS256),
+    ) {
+        Ok(c) => c.claims.sub,
+        Err(_) => return Err(HttpResponse::Unauthorized().body("Invalid token")),
+    };
+
+    let user_id = match user_id_str.parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => return Err(HttpResponse::Unauthorized().body("Invalid token")),
+    };
+
+    Ok(user_id)
+}
+
+fn check_user_admin(user_id: i64, data: &Data<RwLock<AppState>>) -> Result<bool, HttpResponse> {
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return Err(HttpResponse::InternalServerError().body("Failed to lock state")),
+    };
+
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return Err(HttpResponse::InternalServerError().body("Failed to lock database")),
+    };
+
+    let is_admin = match db.is_admin(user_id) {
+        Ok(admin) => admin,
+        Err(_) => return Err(HttpResponse::InternalServerError().body("Failed to check admin")),
+    };
+
+    Ok(is_admin)
 }

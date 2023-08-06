@@ -22,6 +22,7 @@ pub struct Voxel {
     pub grid_size: (usize, usize, usize),
     pub grid: Grid,
     pub palette: Vec<Color>,
+    pub path: String,
     sessions: Mutex<Vec<Addr<PlaceWebSocketConnection>>>,
 }
 
@@ -77,6 +78,7 @@ impl Voxel {
             grid,
             palette,
             sessions: Mutex::new(Vec::new()),
+            path: format!("voxels/{}.vxl", id),
         }
     }
 
@@ -133,7 +135,7 @@ impl Voxel {
     async fn save_loop(self: &Arc<Self>) {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-            self.write().unwrap();
+            self.write(&self.path).unwrap();
         }
     }
 
@@ -183,8 +185,7 @@ impl Voxel {
         grid_data.into_iter().map(AtomicCell::new).collect()
     }
 
-    pub fn write(&self) -> std::io::Result<()> {
-        let path = format!("voxels/{}.vxl", self.id);
+    pub fn write(&self, path: &str) -> std::io::Result<()> {
         let file = File::create(path)?;
         let mut writer = BufWriter::new(file);
 

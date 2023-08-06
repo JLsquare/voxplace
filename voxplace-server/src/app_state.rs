@@ -62,6 +62,22 @@ impl AppState {
         }
     }
 
+    pub fn add_voxel(&mut self, voxel: Voxel) {
+        match self.database.lock() {
+            Ok(database ) => match database.save_new_voxel(&voxel) {
+                Ok(_) => {
+                    println!("Added new voxel with id {}", voxel.id)
+                }
+                Err(e) => {
+                    eprintln!("Failed to save new voxel: {}", e);
+                }
+            },
+            Err(e) => {
+                eprintln!("Failed to lock the database: {}", e);
+            }
+        }
+    }
+
     pub fn add_place(&mut self, place: Place) {
         match self.database.lock() {
             Ok(database) => match database.save_new_voxel(&place.voxel) {
