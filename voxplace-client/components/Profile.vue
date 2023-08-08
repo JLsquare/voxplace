@@ -9,7 +9,8 @@
           <div class="bg-blue-300 border-2 border-black rounded-full w-6 h-6 mt-1"/>
           <p class="text-2xl ml-4">{{ profile.username }}</p>
         </div>
-        <TinyButton text="Follow" class="bg-blue-300 hover:bg-blue-400 ml-4"/>
+        <TinyButton v-if="!isMe" text="Follow" class="bg-blue-300 hover:bg-blue-400 ml-4"/>
+        <TinyButton v-if="isMe" @click="$emit('edit-profile-pressed')" text="Edit Profile" class="bg-blue-300 hover:bg-blue-400 ml-4"/>
       </div>
       <p class="text-xl mt-4">Joined: {{ unixTimestampToReadableDate(profile.created_at) }}</p>
       <p class="text-xl">Last Online: {{ unixTimestampToReadableDate(profile.last_connected_at) }}</p>
@@ -18,7 +19,7 @@
       <div class="relative h-6 bg-gray-200 rounded-xl border-2 border-black w-full">
         <div class="absolute h-full bg-blue-300 rounded-xl" :style="{ width: xpProgress(profile.xp) + '%' }"></div>
         <div class="absolute top-0 left-0 right-0 bottom-0 flex justify-center items-center">
-          <span>{{ xpDifference(profile.xp) }} / {{ xpRequiredForNextLevel(calculateLevel(profile.xp)) }}</span>
+          <span>{{ xpDifference(profile.xp) }} / {{ xpRequiredForNextLevel(calculateLevel(profile.xp)) }} XP</span>
         </div>
       </div>
     </div>
@@ -27,39 +28,19 @@
 
 <script setup>
 const props = defineProps({
-  user_id: {
-    type: String,
+  profile: {
+    type: Object,
     required: true
+  },
+  isMe: {
+    type: Boolean,
+    default: false
   }
 });
-
-let profile = ref(null);
-
-onMounted(() => {
-  getProfile();
-});
-
-async function getProfile() {
-  const token = localStorage.getItem('token');
-
-  let res = await fetch(`http://localhost:8000/api/user/profile/${props.user_id}`, {
-    headers: {
-      'Authorization': token
-    }
-  });
-  if(res.ok) {
-    let data = await res.json();
-    console.log(data);
-    profile.value = data;
-  } else {
-    let error = await res.text();
-    console.error(error);
-  }
-}
 
 function unixTimestampToReadableDate(timestamp) {
   const date = new Date(timestamp * 1000);
-  return date.toLocaleDateString() + " " + date.toLocaleTimeString();
+  return date.toLocaleDateString();
 }
 
 function calculateLevel(xp) {

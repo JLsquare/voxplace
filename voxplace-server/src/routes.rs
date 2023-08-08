@@ -64,6 +64,16 @@ struct Claims {
     exp: usize,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EditUserRequest {
+    username: String,
+    password: String,
+    new_username: String,
+    new_email: String,
+    new_password: String,
+}
+
 #[get("/api/place/ws/{id}")]
 async fn ws_index(
     req: HttpRequest,
@@ -509,7 +519,7 @@ async fn register_user(
 #[post("/api/user/login")]
 async fn login_user(
     data: Data<RwLock<AppState>>,
-    req: Json<LoginRequest>
+    json: Json<LoginRequest>
 ) -> impl Responder {
     let app_state = match data.read() {
         Ok(state) => state,
@@ -523,7 +533,7 @@ async fn login_user(
         Err(_) => return HttpResponse::InternalServerError().body("Failed to lock database"),
     };
 
-    let user_id = match db.login_user(&req.username, &req.password) {
+    let user_id = match db.login_user(&json.username, &json.password) {
         Ok(user_id) => user_id,
         Err(_) => return HttpResponse::Unauthorized().body("Invalid username or password"),
     };
@@ -558,7 +568,7 @@ async fn get_user_profile(
     let mut user_id = 0;
     let path = path.into_inner();
 
-    if(path == "me") {
+    if path == "me" {
         user_id = match check_user(req) {
             Ok(id) => id,
             Err(res) => return res,
@@ -580,12 +590,67 @@ async fn get_user_profile(
         Err(_) => return HttpResponse::InternalServerError().body("Failed to lock database"),
     };
 
-    let user_profile = match db.get_user_profile(user_id) {
-        Ok(user_profile) => user_profile,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to get user profile"),
+    if path == "me" {
+        match db.get_full_user_profile(user_id) {
+            Ok(user_profile) => HttpResponse::Ok().json(user_profile),
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to get user profile"),
+        }
+    } else {
+        match db.get_user_profile(user_id) {
+            Ok(user_profile) => HttpResponse::Ok().json(user_profile),
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to get user profile"),
+        }
+    }
+}
+
+
+#[post("/api/user/edit")]
+async fn edit_user(
+    data: Data<RwLock<AppState>>,
+    json: Json<EditUserRequest>,
+) -> impl Responder {
+    let mut app_state = match data.write() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
     };
 
-    HttpResponse::Ok().json(user_profile)
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to lock database"),
+    };
+
+    let user_id = match db.login_user(&json.username, &json.password) {
+        Ok(user_id) => user_id,
+        Err(_) => return HttpResponse::Unauthorized().body("Invalid username or password"),
+    };
+
+    if json.new_username != "" {
+        match db.update_username(user_id, &json.new_username) {
+            Ok(_) => (),
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to update username"),
+        };
+    }
+
+    if json.new_email != "" {
+        match db.update_email(user_id, &json.new_email) {
+            Ok(_) => (),
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to update email"),
+        };
+    }
+
+    if json.new_password != "" {
+        let password_hash = match hash(&json.new_password, DEFAULT_COST) {
+            Ok(hash) => hash,
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to hash password"),
+        };
+
+        match db.update_password(user_id, &password_hash) {
+            Ok(_) => (),
+            Err(_) => return HttpResponse::InternalServerError().body("Failed to update password"),
+        };
+    }
+
+    HttpResponse::Ok().json("User updated")
 }
 
 #[post("/api/place/create")]

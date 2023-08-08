@@ -13,6 +13,17 @@ pub struct UserProfile {
     pub last_connected_at: i64,
 }
 
+#[derive(Serialize)]
+pub struct FullUserProfile {
+    pub user_id: String,
+    pub username: String,
+    pub email: String,
+    pub voxel_id: String,
+    pub xp: i64,
+    pub created_at: i64,
+    pub last_connected_at: i64,
+}
+
 impl Database {
     pub fn create_user_table(&self) -> Result<(), Error> {
         self.conn.lock().unwrap().execute(
@@ -176,6 +187,32 @@ impl Database {
                 xp,
                 created_at,
                 last_connected_at,
+            })
+        } else {
+            Err(Error::QueryReturnedNoRows)
+        }
+    }
+
+    pub fn get_full_user_profile(&self, user_id: i64) -> Result<FullUserProfile, Error> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT user_id, username, voxel_id, xp, created_at, last_connected_at, email FROM User WHERE user_id = ?")?;
+        let mut rows = stmt.query(params![user_id])?;
+        if let Some(row) = rows.next()? {
+            let user_id: i64 = row.get(0)?;
+            let username: String = row.get(1)?;
+            let voxel_id: i64 = row.get(2)?;
+            let xp: i64 = row.get(3)?;
+            let created_at: i64 = row.get(4)?;
+            let last_connected_at: i64 = row.get(5)?;
+            let email: String = row.get(6)?;
+            Ok(FullUserProfile {
+                user_id: user_id.to_string(),
+                username,
+                voxel_id: voxel_id.to_string(),
+                xp,
+                created_at,
+                last_connected_at,
+                email,
             })
         } else {
             Err(Error::QueryReturnedNoRows)

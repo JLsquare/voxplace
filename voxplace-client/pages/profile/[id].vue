@@ -1,7 +1,7 @@
 <template>
   <div class="h-screen font-roboto">
-    <ProfileTopBar @edit-pressed="toggleLoginEditor()"/>
-    <Profile :user_id="route.params.id" class="absolute left-0 top-0 ml-16 mt-32"/>
+    <ProfileTopBar/>
+    <Profile @edit-profile-pressed="toggleLoginEditor" :profile="profile" :isMe="route.params.id === 'me'" class="absolute left-0 top-0 ml-16 mt-32"/>
     <div class="flex flex-col items-center">
       <div class="flex justify-center items-center mt-4 w-[37rem] flex-col z-10">
         <SearchBar />
@@ -14,7 +14,7 @@
         <Voxels/>
       </div>
     </div>
-    <ProfileEditor v-if="showLoginEditor" class="absolute right-0 top-0 mr-16 mt-32"/>
+    <ProfileEditor :profile="profile" @close="toggleLoginEditor" v-if="showLoginEditor" class="absolute right-0 top-0 mr-16 mt-32"/>
   </div>
 </template>
 
@@ -24,5 +24,29 @@ let showLoginEditor = ref(false);
 
 function toggleLoginEditor() {
   showLoginEditor.value = !showLoginEditor.value;
+}
+
+let profile = ref(null);
+
+onMounted(() => {
+  getProfile();
+});
+
+async function getProfile() {
+  const token = localStorage.getItem('token');
+
+  let res = await fetch(`http://${window.location.hostname}:8000/api/user/profile/${route.params.id}`, {
+    headers: {
+      'Authorization': token
+    }
+  });
+  if(res.ok) {
+    let data = await res.json();
+    console.log(data);
+    profile.value = data;
+  } else {
+    let error = await res.text();
+    console.error(error);
+  }
 }
 </script>

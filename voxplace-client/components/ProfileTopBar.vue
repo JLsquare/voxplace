@@ -8,7 +8,6 @@
     </div>
     <div class="w-96 flex justify-end space-x-8 mr-8">
       <Button text="Log Out" @click="logout" routerLink="/" class="xl:block hidden bg-white hover:bg-neutral-300"/>
-      <Button text="Edit Profile" @click="$emit('edit-pressed')" class="xl:block hidden bg-white hover:bg-neutral-300"/>
       <Button text="Home" routerLink="/" class="xl:block hidden bg-white hover:bg-neutral-300"/>
     </div>
   </div>
