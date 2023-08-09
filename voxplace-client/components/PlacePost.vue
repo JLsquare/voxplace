@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-white border-2 border-black rounded-2xl w-[30rem] h-[20rem] flex flex-col justify-between items-center shadow-custom relative">
+  <div class="bg-white border-2 border-black rounded-2xl w-[40rem] h-[32rem] flex flex-col justify-between items-center shadow-custom relative">
     <NuxtLink :to="`/place/${place_id}`" class="w-full h-full">
       <VoxelPreview :voxel_id="voxel_id" />
     </NuxtLink>
@@ -32,6 +32,6 @@ const props = defineProps({
   voxel_id: {
     type: String,
     default: '0'
-  }
+  },
 })
 </script>

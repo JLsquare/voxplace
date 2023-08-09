@@ -25,8 +25,8 @@ let selectedTool = ref(-1);
 let selectedAction = ref(-1);
 
 const route = useRoute();
-const size = 8;
-const chunkSize = 8;
+let size = 0;
+let chunkSize = 0;
 const moveSpeed = 0.5;
 let scene;
 let camera;
@@ -147,6 +147,12 @@ async function initVoxelData() {
       .then(response => response.arrayBuffer())
       .then(data => {
         const bytes = new Uint8Array(data);
+        size = Math.cbrt(bytes.length);
+        if (size < 16 || size % 16 !== 0) {
+          chunkSize = size;
+        } else if (size % 16 === 0) {
+          chunkSize = 16;
+        }
         for(let x = 0; x < size; x++) {
           voxels[x] = [];
           for(let y = 0; y < size; y++) {

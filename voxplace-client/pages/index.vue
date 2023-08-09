@@ -5,7 +5,7 @@
       <div class="flex justify-center items-center mt-4 w-[37rem] flex-col z-10">
         <SearchBar />
         <div class="flex space-x-8 justify-center mt-4">
-          <Button text="Trending" class="bg-white hover:bg-neutral-200 w-44"/>
+          <Button text="Top" class="bg-white hover:bg-neutral-200 w-44"/>
           <Button text="Following" disabled class="w-44"/>
           <Button text="New" class="bg-white hover:bg-neutral-200 w-44"/>
         </div>

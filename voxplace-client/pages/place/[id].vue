@@ -20,8 +20,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 
 const route = useRoute();
-const size = 128;
-const chunkSize = 16;
+let size = 0;
+let chunkSize = 0;
 const moveSpeed = 0.5;
 let scene;
 let camera;
@@ -29,11 +29,6 @@ let renderer;
 let controls;
 let loader;
 let infoBarText = ref('(0, 0, 0)   Empty / Server');
-
-const invertedBoxGeometry = new THREE.BoxGeometry(size, size, size);
-invertedBoxGeometry.applyMatrix4(new THREE.Matrix4().makeScale(-1, -1, -1));
-const planeGeometry = new THREE.PlaneGeometry(size, size);
-planeGeometry.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
 
 let voxels = [];
 let palette = [];
@@ -51,7 +46,6 @@ let clickTime = 0;
 let currentTime = 0;
 let timeLimit = 500;
 let oldClick = new THREE.Vector2();
-let selectedColor = null;
 let needsUpdate = [];
 let xUpdate = 0;
 let yUpdate = 0;
@@ -63,7 +57,6 @@ onMounted(() => {
 })
 
 async function init() {
-  initScene();
   await initPalette();
   await initVoxelData();
   initSocket();
@@ -110,6 +103,12 @@ function initScene() {
 
   controls.maxDistance = 512;
   controls.minDistance = 2;
+
+  const planeGeometry = new THREE.PlaneGeometry(size, size);
+  planeGeometry.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
+
+  const invertedBoxGeometry = new THREE.BoxGeometry(size, size, size);
+  invertedBoxGeometry.applyMatrix4(new THREE.Matrix4().makeScale(-1, -1, -1));
 
   const borderMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.05 });
   const borderMesh = new THREE.Mesh(invertedBoxGeometry, borderMaterial);
@@ -177,6 +176,12 @@ async function initVoxelData() {
       .then(response => response.arrayBuffer())
       .then(data => {
         const bytes = new Uint8Array(data);
+        size = Math.cbrt(bytes.length);
+        if (size < 16 || size % 16 !== 0) {
+          chunkSize = size;
+        } else if (size % 16 === 0) {
+          chunkSize = 16;
+        }
         for(let x = 0; x < size; x++) {
           voxels[x] = [];
           for(let y = 0; y < size; y++) {
@@ -191,6 +196,7 @@ async function initVoxelData() {
             }
           }
         }
+        initScene();
         initChunks();
       });
 }
@@ -306,9 +312,17 @@ function generateChunk(x, y, z) {
             indexOffset += 4;
           }
 
+          const faceNormalDirections = [0, 1, 2, 3, 4, 5];
+          const shadingFactors = [0.5, 0.9, 0.8, 0.7, 0.6, 1.0];
+
           for(let i = 0; i < 6; i++) {
             if([leftEmpty, rightEmpty, bottomEmpty, topEmpty, frontEmpty, backEmpty][i]) {
-              let color = new THREE.Color(palette[voxel - 1])
+              let color = new THREE.Color(palette[voxel - 1]);
+
+              color.r *= shadingFactors[faceNormalDirections[i]];
+              color.g *= shadingFactors[faceNormalDirections[i]];
+              color.b *= shadingFactors[faceNormalDirections[i]];
+
               chunkColors.push(color.r, color.g, color.b);
               chunkColors.push(color.r, color.g, color.b);
               chunkColors.push(color.r, color.g, color.b);
