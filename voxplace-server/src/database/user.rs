@@ -218,4 +218,28 @@ impl Database {
             Err(Error::QueryReturnedNoRows)
         }
     }
+
+    pub fn get_top_users(&self, limit: i64) -> Result<Vec<UserProfile>, Error> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT user_id, username, voxel_id, xp, created_at, last_connected_at FROM User ORDER BY xp DESC LIMIT ?")?;
+        let mut rows = stmt.query(params![limit])?;
+        let mut users = Vec::new();
+        while let Some(row) = rows.next()? {
+            let user_id: i64 = row.get(0)?;
+            let username: String = row.get(1)?;
+            let voxel_id: i64 = row.get(2)?;
+            let xp: i64 = row.get(3)?;
+            let created_at: i64 = row.get(4)?;
+            let last_connected_at: i64 = row.get(5)?;
+            users.push(UserProfile {
+                user_id: user_id.to_string(),
+                username,
+                voxel_id: voxel_id.to_string(),
+                xp,
+                created_at,
+                last_connected_at,
+            });
+        }
+        Ok(users)
+    }
 }

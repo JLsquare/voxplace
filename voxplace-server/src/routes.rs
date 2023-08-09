@@ -650,6 +650,28 @@ async fn get_user_profile(
     }
 }
 
+#[get("/api/user/top/{limit}")]
+async fn get_top_users(
+    data: Data<RwLock<AppState>>,
+    path: Path<i64>,
+) -> impl Responder {
+    let limit = path.into_inner();
+
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
+
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to lock database"),
+    };
+
+    match db.get_top_users(limit) {
+        Ok(users) => HttpResponse::Ok().json(users),
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to get top users"),
+    }
+}
 
 #[post("/api/user/edit")]
 async fn edit_user(
