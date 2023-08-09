@@ -4,7 +4,7 @@ use crate::voxel::Voxel;
 use crate::websocket::PlaceWebSocketConnection;
 use actix_web::http::header;
 use actix_web::web::{Data, Json, Path, Payload};
-use actix_web::{get, post, HttpRequest, HttpResponse, Responder};
+use actix_web::{get, post, HttpRequest, HttpResponse, Responder, web};
 use actix_web_actors::ws;
 use bcrypt::{hash, DEFAULT_COST};
 use chrono::{Duration, Utc};
@@ -13,8 +13,9 @@ use flate2::Compression;
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use rand::{thread_rng, Rng};
 use serde_derive::{Deserialize, Serialize};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::sync::RwLock;
+use flate2::read::GzDecoder;
 
 #[derive(Deserialize)]
 struct DrawRequest {
@@ -193,6 +194,52 @@ async fn get_voxel(
         .append_header((header::CONTENT_ENCODING, "gzip"))
         .body(compressed_data)
 }
+
+#[post("/api/voxel/save/{id}")]
+async fn save_voxel(
+    data: Data<RwLock<AppState>>,
+    path: Path<String>,
+    body: web::Bytes,
+) -> impl Responder {
+    let id = match path.into_inner().parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => return HttpResponse::BadRequest().body("Invalid voxel"),
+    };
+
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
+
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read database"),
+    };
+
+    let voxel_info = match db.get_voxel_info(id) {
+        Ok(info) => info,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel info"),
+    };
+
+    let voxel = match Voxel::read(&voxel_info.path, voxel_info.voxel_id) {
+        Ok(voxel) => voxel,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel"),
+    };
+
+    let grid = body.to_vec();
+
+    for (i, cell) in voxel.grid.iter().enumerate() {
+        cell.store(grid[i]);
+    }
+
+    match voxel.write(&voxel_info.path) {
+        Ok(_) => (),
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to write voxel"),
+    };
+
+    HttpResponse::Ok().body("Voxel saved")
+}
+
 
 #[get("/api/place/palette/{id}")]
 async fn get_palette(

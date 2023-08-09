@@ -1,11 +1,13 @@
 <template>
   <div class="bg-white border-2 border-black rounded-2xl shadow-custom w-fit p-8">
-    <div class="bg-white border-2 border-black rounded-2xl w-[24rem] h-[24rem] flex justify-between items-center shadow-custom relative cursor-pointer">
-      <VoxelPreview :voxel_id="profile.voxel_id"/>
-      <div class="bg-neutral-200 border-black border-t-2 rounded-b-2xl w-full h-10 absolute bottom-0 flex items-center justify-between">
-        <p class="ml-8 text-xl">Go to editor</p>
+    <NuxtLink :to="'/editor/' + profile.voxel_id" class="w-full h-full">
+      <div class="bg-white border-2 border-black rounded-2xl w-[24rem] h-[24rem] flex justify-between items-center shadow-custom relative cursor-pointer">
+        <VoxelPreview :voxel_id="profile.voxel_id"/>
+        <div class="bg-neutral-200 border-black border-t-2 rounded-b-2xl w-full h-10 absolute bottom-0 flex items-center justify-between">
+          <p class="ml-8 text-xl">Go to editor</p>
+        </div>
       </div>
-    </div>
+    </NuxtLink>
     <div class="mt-8 flex-col">
       <div v-if="!(changeUsername || changeEmail || changePassword)" class="flex flex-col">
         <Button text="Change Username" @click="changeUsername = true" class="bg-white hover:bg-neutral-300 w-full"/>
@@ -60,8 +62,8 @@
         </div>
       </div>
       <div class="flex justify-between">
-        <Button text="Cancel" @click="cancel" class="bg-white hover:bg-neutral-300 mt-2"/>
-        <Button text="Save" @click="save" v-if="changeUsername || changeEmail || changePassword" class="bg-blue-300 hover:bg-blue-400 mt-2"/>
+        <Button text="Cancel" @click="cancel" class="bg-white hover:bg-neutral-300 mt-2 w-32"/>
+        <Button text="Save" @click="save" v-if="changeUsername || changeEmail || changePassword" class="bg-blue-300 hover:bg-blue-400 mt-2 w-32"/>
       </div>
     </div>
   </div>

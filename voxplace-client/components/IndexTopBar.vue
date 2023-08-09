@@ -12,9 +12,9 @@
       <div :class="['bg-black w-32 h-0.5 absolute bottom-0', underlinePosition]"></div>
     </div>
     <div class="w-96 flex justify-end space-x-8 mr-8">
-      <Button text="Create" :disabled="!isAuth" class="xl:block hidden bg-white hover:bg-neutral-300"/>
-      <Button v-if="!isAuth" @click="$emit('login-clicked')" :text="authButton[authButtonIndex]" class="bg-white hover:bg-neutral-300"/>
-      <Button v-if="isAuth" text="Profile" routerLink="/profile/me" class="bg-white hover:bg-neutral-300"/>
+      <Button text="Create" :disabled="!isAuth" class="xl:block hidden bg-white hover:bg-neutral-300 w-44"/>
+      <Button v-if="!isAuth" @click="$emit('login-clicked')" :text="authButton[authButtonIndex]" class="bg-white hover:bg-neutral-300 w-44"/>
+      <Button v-if="isAuth" text="Profile" routerLink="/profile/me" class="bg-white hover:bg-neutral-300 w-44"/>
     </div>
   </div>
 </template>

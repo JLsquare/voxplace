@@ -6,8 +6,8 @@
       <div class="flex justify-center items-center mt-4 w-[37rem] flex-col z-10">
         <SearchBar />
         <div class="flex space-x-8 justify-center mt-4">
-          <Button text="Trending" class="bg-white hover:bg-neutral-200"/>
-          <Button text="New" class="bg-white hover:bg-neutral-200"/>
+          <Button text="Trending" class="bg-white hover:bg-neutral-200 w-44"/>
+          <Button text="New" class="bg-white hover:bg-neutral-200 w-44"/>
         </div>
       </div>
       <div class="h-screen absolute top-0 pt-[10.5rem]">

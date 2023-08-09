@@ -3,18 +3,18 @@
     <div class="ml-8 w-96">
       <p class="text-3xl">voxplace. [indev]</p>
     </div>
-    <div class="relative w-auto h-10 flex justify-center items-center">
-
-    </div>
     <div class="w-96 flex justify-end space-x-8 mr-8">
-      <Button text="Log Out" @click="logout" routerLink="/" class="xl:block hidden bg-white hover:bg-neutral-300 w-44"/>
+      <Button text="Back" :routerLink="back" class="xl:block hidden bg-white hover:bg-neutral-300 w-44"/>
       <Button text="Home" routerLink="/" class="xl:block hidden bg-white hover:bg-neutral-300 w-44"/>
     </div>
   </div>
 </template>
 
 <script setup>
-function logout(){
-  localStorage.removeItem('token');
-}
+const props = defineProps({
+  back: {
+    type: String,
+    default: '/profile/me'
+  }
+});
 </script>

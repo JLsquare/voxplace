@@ -17,13 +17,14 @@ const canvasRef = ref(null);
 
 import * as THREE from 'three';
 
-const size = 128;
-const chunkSize = 16;
+let size;
+let chunkSize;
 let scene;
 let camera;
 let renderer;
 let cameraAngle = 0;
-const cameraSpeed = 0.01;
+const cameraSpeed = 0.5;
+let lastTime = 0;
 
 const invertedBoxGeometry = new THREE.BoxGeometry(size, size, size);
 invertedBoxGeometry.applyMatrix4(new THREE.Matrix4().makeScale(-1, -1, -1));
@@ -58,30 +59,7 @@ function initScene() {
     canvas: canvas,
   });
 
-  const borderMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.05 });
-  const borderMesh = new THREE.Mesh(invertedBoxGeometry, borderMaterial);
-  borderMesh.position.set(-0.5, -0.5, -0.5);
-  borderMesh.raycast = () => [];
-  scene.add(borderMesh);
-
-  const floorMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-  const floorMesh = new THREE.Mesh(planeGeometry, floorMaterial);
-  floorMesh.position.set(-0.5, -size / 2 - 0.5, -0.5);
-  floorMesh.visible = false;
-  scene.add(floorMesh);
-
-  const edgesGeometry = new THREE.EdgesGeometry(invertedBoxGeometry);
-  const edgesMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
-  const edgesMesh = new THREE.LineSegments(edgesGeometry, edgesMaterial);
-  edgesMesh.position.set(-0.5, -0.5, -0.5);
-  scene.add(edgesMesh);
-
-  edgesMesh.raycast = () => [];
-
   renderer.setSize(parent.offsetWidth, parent.offsetHeight);
-
-  camera.position.set(0, 0, size);
-  camera.lookAt(0, 0, 0);
 }
 
 async function initPalette() {
@@ -105,6 +83,12 @@ async function initVoxelData() {
       .then(response => response.arrayBuffer())
       .then(data => {
         const bytes = new Uint8Array(data);
+        size = Math.cbrt(bytes.length);
+        if (size < 16 || size % 16 !== 0) {
+          chunkSize = size;
+        } else if (size % 16 === 0) {
+          chunkSize = 16;
+        }
         for(let x = 0; x < size; x++) {
           voxels[x] = [];
           for(let y = 0; y < size; y++) {
@@ -234,9 +218,17 @@ function generateChunk(x, y, z) {
             indexOffset += 4;
           }
 
+          const faceNormalDirections = [0, 1, 2, 3, 4, 5];
+          const shadingFactors = [0.5, 0.9, 0.8, 0.7, 0.6, 1.0];
+
           for(let i = 0; i < 6; i++) {
             if([leftEmpty, rightEmpty, bottomEmpty, topEmpty, frontEmpty, backEmpty][i]) {
-              let color = new THREE.Color(palette[voxel - 1])
+              let color = new THREE.Color(palette[voxel - 1]);
+
+              color.r *= shadingFactors[faceNormalDirections[i]];
+              color.g *= shadingFactors[faceNormalDirections[i]];
+              color.b *= shadingFactors[faceNormalDirections[i]];
+
               chunkColors.push(color.r, color.g, color.b);
               chunkColors.push(color.r, color.g, color.b);
               chunkColors.push(color.r, color.g, color.b);
@@ -259,14 +251,18 @@ function generateChunk(x, y, z) {
   return chunkMesh;
 }
 
-function animate() {
+function animate(time = 0) {
   requestAnimationFrame(animate);
 
-  cameraAngle += cameraSpeed;
-  const radius = size * 1.25;
-  camera.position.x = radius * Math.sin(cameraAngle);
-  camera.position.z = radius * Math.cos(cameraAngle);
-  camera.lookAt(0, 0, 0);
+  const delta = (time - lastTime) / 1000;
+  lastTime = time;
+
+  cameraAngle += cameraSpeed * delta;
+  const radius = size * 1.35;
+  camera.position.x = radius * Math.sin(cameraAngle) - 0.5;
+  camera.position.z = radius * Math.cos(cameraAngle) - 0.5;
+  camera.position.y = size * 0.35;
+  camera.lookAt(-0.5, -1, -0.5);
 
   const frustum = new THREE.Frustum();
   frustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));

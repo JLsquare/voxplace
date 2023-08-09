@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build": "nuxt build",
-    "dev": "nuxt dev",
+    "dev": "NODE_TLS_REJECT_UNAUTHORIZED=0 nuxt dev --https --ssl-cert localhost.pem --ssl-key localhost-key.pem",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare"
@@ -17,6 +17,7 @@
     "@nuxtjs/tailwindcss": "^6.8.0",
     "jsonwebtoken": "^9.0.1",
     "jwt-decode": "^3.1.2",
+    "pako": "^2.1.0",
     "stats.js": "^0.17.0",
     "three": "^0.154.0"
   }
