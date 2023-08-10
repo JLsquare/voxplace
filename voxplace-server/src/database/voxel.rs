@@ -5,7 +5,14 @@ use flate2::write::GzEncoder;
 use crate::database::db::{Database, DatabaseError};
 use crate::voxel::Voxel;
 use rusqlite::params;
-use crate::palette::Palette;
+use serde_derive::Serialize;
+
+#[derive(Serialize)]
+pub struct UserVoxel {
+    pub user_id: String,
+    pub voxel_id: String,
+    pub name: String,
+}
 
 impl Database {
     pub fn create_voxel_table(&self) -> rusqlite::Result<(), DatabaseError> {
@@ -28,12 +35,13 @@ impl Database {
         Ok(())
     }
 
-    pub fn create_palette_table(&self) -> rusqlite::Result<(), DatabaseError> {
+    pub fn create_user_voxel_table(&self) -> rusqlite::Result<(), DatabaseError> {
         let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
         conn.execute(
-            "CREATE TABLE IF NOT EXISTS Palette (
-                palette_id INTEGER PRIMARY KEY,
-                colors BLOB NOT NULL
+            "CREATE TABLE IF NOT EXISTS UserVoxel (
+                user_id INTEGER NOT NULL,
+                voxel_id INTEGER NOT NULL,
+                PRIMARY KEY (user_id, voxel_id)
             )",
             [],
         )?;
@@ -41,41 +49,37 @@ impl Database {
         Ok(())
     }
 
-    pub fn save_new_palette(&self, palette: Palette) -> rusqlite::Result<(), DatabaseError> {
-        let mut bytes: Vec<u8> = Vec::new();
-        for color in palette.colors().iter() {
-            bytes.push(color.0);
-            bytes.push(color.1);
-            bytes.push(color.2);
-        }
-
+    pub fn save_new_user_voxel(&self, user_id: i64, voxel_id: i64) -> rusqlite::Result<(), DatabaseError> {
         let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
         let mut stmt = conn.prepare(
-            "INSERT OR REPLACE INTO Palette (
-                palette_id,
-                colors
+            "INSERT OR REPLACE INTO UserVoxel (
+                user_id,
+                voxel_id
             ) VALUES (?, ?)",
         )?;
-        stmt.execute(params![
-            palette.palette_id(),
-            bytes
-        ])?;
-
+        stmt.execute(params![user_id, voxel_id])?;
         Ok(())
     }
 
-    pub fn get_palette(&self, palette_id: i64) -> rusqlite::Result<Vec<(u8, u8, u8)>, DatabaseError> {
+    pub fn get_user_voxels(&self, user_id: i64) -> rusqlite::Result<Vec<UserVoxel>, DatabaseError> {
         let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
         let mut stmt = conn.prepare(
-            "SELECT colors FROM Palette WHERE palette_id = ?",
+            "SELECT V.voxel_id, V.name
+             FROM UserVoxel UV
+             JOIN Voxel V ON UV.voxel_id = V.voxel_id
+             WHERE UV.user_id = ?",
         )?;
-        let mut rows = stmt.query(params![palette_id])?;
-        let row = rows.next()?.ok_or(DatabaseError::NoSuchPalette())?;
-        let colors: Vec<u8> = row.get(0)?;
+
+        let mut rows = stmt.query(params![user_id])?;
         let mut result = Vec::new();
-        for i in 0..colors.len() / 3 {
-            result.push((colors[i * 3], colors[i * 3 + 1], colors[i * 3 + 2]));
+        while let Some(row) = rows.next()? {
+            result.push(UserVoxel {
+                user_id: user_id.to_string(),
+                voxel_id: row.get::<_, i64>(0)?.to_string(),
+                name: row.get(1)?,
+            });
         }
+
         Ok(result)
     }
 

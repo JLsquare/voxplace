@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col justify-center items-center font-roboto">
-    <IndexTopBar :auth-button-index="authId" :is-auth="isAuth" @login-clicked="handleLoginClicked" @voxels-pressed="setTab(0)" @places-pressed="setTab(1)" @users-pressed="setTab(2)" class="z-10" />
+    <IndexTopBar :auth-button-index="authId" :is-auth="isAuth" @login-clicked="handleLoginClicked" @posts-pressed="setTab(0)" @places-pressed="setTab(1)" @users-pressed="setTab(2)" class="z-10" />
     <div class=" mx-16 w-full flex flex-col items-center h-full">
       <div class="flex justify-center items-center mt-4 w-[37rem] flex-col z-10">
         <SearchBar />

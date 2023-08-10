@@ -5,7 +5,7 @@
     </div>
     <div class="relative w-auto h-10 flex justify-center items-center">
       <div class="flex space-x-10 lg:space-x-20 items-center">
-        <p class="text-2xl cursor-pointer w-20 text-center" @mousedown="selectedItem = 0; $emit('voxels-pressed')">Voxels</p>
+        <p class="text-2xl cursor-pointer w-20 text-center" @mousedown="selectedItem = 0; $emit('posts-pressed')">Posts</p>
         <p class="text-2xl cursor-pointer w-20 text-center" @mousedown="selectedItem = 1; $emit('places-pressed')">Places</p>
         <p class="text-2xl cursor-pointer w-20 text-center" @mousedown="selectedItem = 2; $emit('users-pressed')">Users</p>
       </div>

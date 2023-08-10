@@ -48,8 +48,13 @@ struct LoginRequest {
 struct CreatePlaceRequest {
     name: String,
     size: (usize, usize, usize),
-    palette: String,
     cooldown: usize,
+}
+
+#[derive(Deserialize)]
+struct CreateVoxelRequest {
+    name: String,
+    size: (usize, usize, usize),
 }
 
 #[derive(Serialize)]
@@ -589,6 +594,67 @@ async fn get_user_profile(
             Ok(user_profile) => HttpResponse::Ok().json(user_profile),
             Err(_) => HttpResponse::InternalServerError().body("Failed to get user profile"),
         }
+    }
+}
+
+#[get("/api/user/voxels/all")]
+async fn get_user_voxels(
+    data: Data<RwLock<AppState>>,
+    req: HttpRequest,
+) -> impl Responder {
+    let user_id = match check_user(req) {
+        Ok(id) => id,
+        Err(res) => return res,
+    };
+
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
+
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to lock database"),
+    };
+
+    let voxels = match db.get_user_voxels(user_id) {
+        Ok(voxels) => voxels,
+        Err(e) => return HttpResponse::InternalServerError().body(format!("Failed to get user voxels : {}", e)),
+    };
+
+    HttpResponse::Ok().json(voxels)
+}
+
+#[post("/api/user/voxels/create")]
+async fn create_user_voxel(
+    data: Data<RwLock<AppState>>,
+    req: HttpRequest,
+    json: Json<CreateVoxelRequest>,
+) -> impl Responder {
+    let user_id = match check_user(req) {
+        Ok(id) => id,
+        Err(res) => return res,
+    };
+
+    let voxel_id = thread_rng().gen::<i64>();
+
+    let voxel = Voxel::new(voxel_id, &json.name, 0, json.size, None, None, None);
+
+    let mut app_state = match data.write() {
+        Ok(app_state) => app_state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to lock app state"),
+    };
+
+    app_state.add_voxel(voxel);
+
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to lock database"),
+    };
+
+    match db.save_new_user_voxel(user_id, voxel_id) {
+        Ok(_) => HttpResponse::Ok().json("Voxel user link created"),
+        Err(e) => HttpResponse::InternalServerError().body(format!("Failed to create voxel user link : {}", e)),
     }
 }
 

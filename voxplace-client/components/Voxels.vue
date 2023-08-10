@@ -7,6 +7,7 @@
         <VoxelPost />
         <VoxelPost />
         <VoxelPost />
+        <div class="w-full h-16"></div>
       </div>
     </div>
   </div>
