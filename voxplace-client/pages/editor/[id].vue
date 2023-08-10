@@ -37,9 +37,6 @@ let loader;
 const parentRef = ref(null);
 const canvasRef = ref(null);
 
-const invertedBoxGeometry = new THREE.BoxGeometry(size, size, size);
-invertedBoxGeometry.applyMatrix4(new THREE.Matrix4().makeScale(-1, -1, -1));
-
 let voxels = [];
 let palette = [];
 let selectMesh = null;
@@ -71,9 +68,10 @@ function selectionChanged(selections){
 }
 
 async function init() {
-  initScene();
   await initPalette();
   await initVoxelData();
+  initScene();
+  initChunks();
   addEventListeners();
 }
 
@@ -92,6 +90,9 @@ function initScene() {
 
   controls.maxDistance = 512;
   controls.minDistance = 2;
+
+  const invertedBoxGeometry = new THREE.BoxGeometry(size, size, size);
+  invertedBoxGeometry.applyMatrix4(new THREE.Matrix4().makeScale(-1, -1, -1));
 
   const borderMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.05 });
   const borderMesh = new THREE.Mesh(invertedBoxGeometry, borderMaterial);
@@ -127,7 +128,7 @@ function initScene() {
 }
 
 async function initPalette() {
-  const response = await fetch(`http://${window.location.hostname}:8000/api/voxel/palette/${route.params.id}`, {
+  const response = await fetch(`http://${window.location.hostname}:8000/api/palette/get/0`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
@@ -167,7 +168,6 @@ async function initVoxelData() {
             }
           }
         }
-        initChunks();
       });
 }
 

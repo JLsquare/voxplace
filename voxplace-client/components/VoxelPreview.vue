@@ -63,7 +63,7 @@ function initScene() {
 }
 
 async function initPalette() {
-  const response = await fetch(`http://${window.location.hostname}:8000/api/voxel/palette/${props.voxel_id}`, {
+  const response = await fetch(`http://${window.location.hostname}:8000/api/palette/get/0`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',

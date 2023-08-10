@@ -13,9 +13,8 @@ use flate2::Compression;
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use rand::{thread_rng, Rng};
 use serde_derive::{Deserialize, Serialize};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::sync::RwLock;
-use flate2::read::GzDecoder;
 
 #[derive(Deserialize)]
 struct DrawRequest {
@@ -129,6 +128,8 @@ async fn get_grid(
         None => return HttpResponse::BadRequest().body("Invalid place"),
     };
 
+    let place = place.read().unwrap();
+
     let grid: Vec<u8> = place.voxel.grid.iter().map(|cell| cell.load()).collect();
 
     let mut e = GzEncoder::new(Vec::new(), Compression::default());
@@ -167,14 +168,9 @@ async fn get_voxel(
         Err(_) => return HttpResponse::InternalServerError().body("Failed to read database"),
     };
 
-    let voxel_info = match db.get_voxel_info(id) {
+    let voxel = match db.get_voxel(id) {
         Ok(info) => info,
         Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel info"),
-    };
-
-    let voxel = match Voxel::read(&voxel_info.path, voxel_info.voxel_id) {
-        Ok(voxel) => voxel,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel"),
     };
 
     let grid: Vec<u8> = voxel.grid.iter().map(|cell| cell.load()).collect();
@@ -216,61 +212,18 @@ async fn save_voxel(
         Err(_) => return HttpResponse::InternalServerError().body("Failed to read database"),
     };
 
-    let voxel_info = match db.get_voxel_info(id) {
-        Ok(info) => info,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel info"),
-    };
-
-    let voxel = match Voxel::read(&voxel_info.path, voxel_info.voxel_id) {
-        Ok(voxel) => voxel,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel"),
-    };
-
     let grid = body.to_vec();
 
-    for (i, cell) in voxel.grid.iter().enumerate() {
-        cell.store(grid[i]);
-    }
-
-    match voxel.write(&voxel_info.path) {
+    match db.save_voxel_grid(id, grid) {
         Ok(_) => (),
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to write voxel"),
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to save voxel grid"),
     };
 
     HttpResponse::Ok().body("Voxel saved")
 }
 
-
-#[get("/api/place/palette/{id}")]
+#[get("/api/palette/get/{id}")]
 async fn get_palette(
-    data: Data<RwLock<AppState>>,
-    path: Path<String>
-) -> impl Responder {
-    let id = match path.into_inner().parse::<i64>() {
-        Ok(id) => id,
-        Err(_) => return HttpResponse::BadRequest().body("Invalid place"),
-    };
-
-    let app_state = match data.read() {
-        Ok(state) => state,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
-    };
-
-    let place = match app_state.places.get(&id) {
-        Some(place) => place,
-        None => return HttpResponse::BadRequest().body("Invalid place"),
-    };
-
-    let palette_hex: Vec<String> = place.voxel.palette
-        .iter()
-        .map(|&(r, g, b)| format!("#{:02x}{:02x}{:02x}", r, g, b))
-        .collect();
-
-    HttpResponse::Ok().json(palette_hex)
-}
-
-#[get("/api/voxel/palette/{id}")]
-async fn get_voxel_palette(
     data: Data<RwLock<AppState>>,
     path: Path<String>
 ) -> impl Responder {
@@ -289,17 +242,12 @@ async fn get_voxel_palette(
         Err(_) => return HttpResponse::InternalServerError().body("Failed to read database"),
     };
 
-    let voxel_info = match db.get_voxel_info(id) {
-        Ok(info) => info,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel info"),
+    let palette = match db.get_palette(id) {
+        Ok(palette) => palette,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read palette"),
     };
 
-    let voxel = match Voxel::read(&voxel_info.path, voxel_info.voxel_id) {
-        Ok(voxel) => voxel,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel"),
-    };
-
-    let palette_hex: Vec<String> = voxel.palette
+    let palette_hex: Vec<String> = palette
         .iter()
         .map(|&(r, g, b)| format!("#{:02x}{:02x}{:02x}", r, g, b))
         .collect();
@@ -339,7 +287,8 @@ async fn draw_voxel_http(
         Err(_) => return HttpResponse::InternalServerError().body("Failed to get time"),
     };
 
-    let mut username = String::new();
+    let username;
+    let cooldown;
 
     {
         let db = match app_state.database.lock() {
@@ -347,14 +296,13 @@ async fn draw_voxel_http(
             Err(_) => return HttpResponse::InternalServerError().body("Failed to read database"),
         };
 
-        let cooldown = match db.get_user_cooldown(id, user_id) {
-            Ok(cooldown) => cooldown,
-            Err(_) => 0,
-        };
+        let user_cooldown = db.get_user_cooldown(id, user_id).unwrap_or(0);
 
-        if cooldown > time {
+        if user_cooldown > time {
             return HttpResponse::BadRequest().body("Cooldown not finished");
         }
+
+        let place = place.read().unwrap();
 
         match db.set_user_cooldown(id, user_id, time + place.cooldown) {
             Ok(_) => (),
@@ -365,18 +313,20 @@ async fn draw_voxel_http(
             Ok(username) => username,
             Err(_) => return HttpResponse::InternalServerError().body("Failed to get username"),
         };
+
+        cooldown = place.cooldown;
+
+        match place.voxel.draw_voxel(json.x, json.y, json.z, json.color) {
+            Ok(_) => (),
+            Err(e) => return HttpResponse::BadRequest().body(e),
+        };
+
+        place.add_place_update(json.x, json.y, json.z, user_id);
     }
 
-    let cooldown = place.cooldown.clone();
+    app_state.places_users_updates();
 
-    match place.voxel.draw_voxel(json.x, json.y, json.z, json.color) {
-        Ok(_) => (),
-        Err(e) => return HttpResponse::BadRequest().body(e),
-    };
-
-    place.add_place_update(json.x, json.y, json.z, user_id);
-
-    app_state.places_updates();
+    app_state.update_place_grid(id);
 
     let response = DrawResponse {
         username,
@@ -412,10 +362,7 @@ async fn get_cooldown(
         Err(_) => return HttpResponse::InternalServerError().body("Failed to read database"),
     };
 
-    let cooldown = match db.get_user_cooldown(id, user_id) {
-        Ok(cooldown) => cooldown,
-        Err(_) => 0,
-    };
+    let cooldown = db.get_user_cooldown(id, user_id).unwrap_or(0);
 
     HttpResponse::Ok().json(cooldown)
 }
@@ -521,12 +468,7 @@ async fn register_user(
         Err(_) => return HttpResponse::InternalServerError().json("Failed to read app state"),
     };
 
-    let voxel = Voxel::new(voxel_id, &voxel_name, None, (8, 8, 8), None);
-
-    match voxel.write(&voxel.path) {
-        Ok(_) => (),
-        Err(_) => return HttpResponse::InternalServerError().json("Failed to write voxel"),
-    }
+    let voxel = Voxel::new(voxel_id, &voxel_name, 0, (8, 8, 8), None, None, None);
 
     app_state.add_voxel(voxel);
 
@@ -612,7 +554,7 @@ async fn get_user_profile(
     path: Path<String>,
     req: HttpRequest,
 ) -> impl Responder {
-    let mut user_id = 0;
+    let user_id;
     let path = path.into_inner();
 
     if path == "me" {
@@ -640,12 +582,12 @@ async fn get_user_profile(
     if path == "me" {
         match db.get_full_user_profile(user_id) {
             Ok(user_profile) => HttpResponse::Ok().json(user_profile),
-            Err(_) => return HttpResponse::InternalServerError().body("Failed to get user profile"),
+            Err(_) => HttpResponse::InternalServerError().body("Failed to get user profile"),
         }
     } else {
         match db.get_user_profile(user_id) {
             Ok(user_profile) => HttpResponse::Ok().json(user_profile),
-            Err(_) => return HttpResponse::InternalServerError().body("Failed to get user profile"),
+            Err(_) => HttpResponse::InternalServerError().body("Failed to get user profile"),
         }
     }
 }
@@ -669,7 +611,7 @@ async fn get_top_users(
 
     match db.get_top_users(limit) {
         Ok(users) => HttpResponse::Ok().json(users),
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to get top users"),
+        Err(_) => HttpResponse::InternalServerError().body("Failed to get top users"),
     }
 }
 
@@ -678,7 +620,7 @@ async fn edit_user(
     data: Data<RwLock<AppState>>,
     json: Json<EditUserRequest>,
 ) -> impl Responder {
-    let mut app_state = match data.write() {
+    let app_state = match data.write() {
         Ok(state) => state,
         Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
     };
@@ -693,21 +635,21 @@ async fn edit_user(
         Err(_) => return HttpResponse::Unauthorized().body("Invalid username or password"),
     };
 
-    if json.new_username != "" {
+    if !json.new_username.is_empty() {
         match db.update_username(user_id, &json.new_username) {
             Ok(_) => (),
             Err(_) => return HttpResponse::InternalServerError().body("Failed to update username"),
         };
     }
 
-    if json.new_email != "" {
+    if !json.new_email.is_empty() {
         match db.update_email(user_id, &json.new_email) {
             Ok(_) => (),
             Err(_) => return HttpResponse::InternalServerError().body("Failed to update email"),
         };
     }
 
-    if json.new_password != "" {
+    if !json.new_password.is_empty() {
         let password_hash = match hash(&json.new_password, DEFAULT_COST) {
             Ok(hash) => hash,
             Err(_) => return HttpResponse::InternalServerError().body("Failed to hash password"),
@@ -752,12 +694,7 @@ async fn create_place(
         Err(_) => return HttpResponse::InternalServerError().body("Failed to lock app state"),
     };
 
-    let voxel = Voxel::new(voxel_id, &json.name, None, json.size, None);
-
-    match voxel.write(&voxel.path) {
-        Ok(_) => (),
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to write voxel"),
-    };
+    let voxel = Voxel::new(voxel_id, &json.name, 0, json.size, None, None, None);
 
     let place = Place::new(place_id, true, json.cooldown as i64, voxel);
     app_state.add_place(place);
@@ -777,7 +714,7 @@ fn check_user(req: HttpRequest) -> Result<i64, HttpResponse> {
     };
 
     let user_id_str = match decode::<Claims>(
-        &token,
+        token,
         &DecodingKey::from_secret("secret".as_bytes()),
         &Validation::new(Algorithm::HS256),
     ) {

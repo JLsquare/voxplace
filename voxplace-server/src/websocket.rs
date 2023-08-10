@@ -3,10 +3,10 @@ use crate::voxel::UpdateMessage;
 use actix::{Actor, AsyncContext, Handler, StreamHandler};
 use actix_web_actors::ws;
 use serde_json::json;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 pub struct PlaceWebSocketConnection {
-    pub place: Arc<Place>,
+    pub place: Arc<RwLock<Place>>,
 }
 
 impl Actor for PlaceWebSocketConnection {
@@ -14,7 +14,8 @@ impl Actor for PlaceWebSocketConnection {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         let addr = ctx.address();
-        self.place.voxel.add_session(addr);
+        let place = self.place.write().unwrap();
+        place.voxel.add_session(addr);
     }
 }
 

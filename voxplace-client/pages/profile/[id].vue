@@ -19,6 +19,8 @@
 </template>
 
 <script setup>
+import jwtDecode from "jwt-decode";
+
 const route = useRoute();
 let showLoginEditor = ref(false);
 
@@ -34,6 +36,16 @@ onMounted(() => {
 
 async function getProfile() {
   const token = localStorage.getItem('token');
+
+  if(!token) {
+    return;
+  }
+
+  const decodedToken = jwtDecode(token);
+
+  if (decodedToken.sub === route.params.id){
+    route.params.id = 'me';
+  }
 
   let res = await fetch(`http://${window.location.hostname}:8000/api/user/profile/${route.params.id}`, {
     headers: {

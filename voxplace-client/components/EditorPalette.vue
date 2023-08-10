@@ -70,7 +70,7 @@ onMounted(() => {
 });
 
 async function getPalette() {
-  const response = await fetch(`http://${window.location.hostname}:8000/api/voxel/palette/${route.params.id}`, {
+  const response = await fetch(`http://${window.location.hostname}:8000/api/palette/get/0`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
