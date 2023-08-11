@@ -9,6 +9,7 @@
 
 <script setup>
 const hover = ref(false);
+
 const props = defineProps({
   color: {
     type: String,

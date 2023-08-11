@@ -20,31 +20,29 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import pako from 'pako';
 
+const route = useRoute();
+
 let selectedColor = ref(-1);
 let selectedTool = ref(-1);
 let selectedAction = ref(-1);
+let parentRef = ref(null);
+let canvasRef = ref(null);
 
-const route = useRoute();
 let size = 0;
 let chunkSize = 0;
-const moveSpeed = 0.5;
+let moveSpeed = 0.5;
 let scene;
 let camera;
 let renderer;
 let controls;
 let loader;
-
-const parentRef = ref(null);
-const canvasRef = ref(null);
-
 let voxels = [];
 let palette = [];
 let selectMesh = null;
 let previewMesh = null;
 let chunks = [];
-
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
+let raycaster = new THREE.Raycaster();
+let mouse = new THREE.Vector2();
 let mouseDown = new THREE.Vector2();
 let mouseUp = new THREE.Vector2();
 let clickCount = 0;
@@ -57,22 +55,18 @@ let xUpdate = 0;
 let yUpdate = 0;
 let zUpdate = 0;
 
-onMounted(() => {
-  init();
+onMounted(async () => {
+  await initPalette();
+  await initVoxelData();
+  initScene();
+  initChunks();
+  addEventListeners();
 })
 
 function selectionChanged(selections){
   selectedColor.value = selections.color;
   selectedTool.value = selections.tool;
   selectedAction.value = selections.action;
-}
-
-async function init() {
-  await initPalette();
-  await initVoxelData();
-  initScene();
-  initChunks();
-  addEventListeners();
 }
 
 function initScene() {
@@ -191,9 +185,7 @@ async function saveVoxelData() {
     },
     body: compressedBytes,
   });
-  if(response.ok){
-    console.log(await response.json);
-  } else {
+  if(!response.ok){
     console.log(await response.text());
   }
 }
@@ -481,7 +473,6 @@ function pointTool() {
     let x = Math.floor(selectMesh.position.x + (size / 2));
     let y = Math.floor(selectMesh.position.y + (size / 2));
     let z = Math.floor(selectMesh.position.z + (size / 2));
-    console.log(x, y, z);
 
     if (x >= 0 && x < size && y >= 0 && y < size && z >= 0 && z < size) {
       if (selectedAction.value === 0) {

@@ -9,7 +9,7 @@ mod post;
 
 use crate::app_state::AppState;
 use crate::database::db::Database;
-use crate::routes::{check_admin, create_place, create_user_voxel, draw_voxel_http, edit_user, get_cooldown, get_grid, get_palette, get_places_info, get_top_users, get_user_profile, get_user_voxels, get_username, get_voxel, login_user, register_user, save_voxel, ws_index};
+use crate::routes::{check_admin, create_place, create_post, create_user_voxel, draw_voxel_http, edit_user, get_cooldown, get_grid, get_palette, get_places_info, get_top_posts, get_top_users, get_user_profile, get_user_voxels, get_username, get_voxel, login_user, register_user, save_voxel, ws_index};
 use actix_cors::Cors;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer};
@@ -51,6 +51,8 @@ async fn main() -> std::io::Result<()> {
             .service(get_top_users)
             .service(get_user_voxels)
             .service(create_user_voxel)
+            .service(create_post)
+            .service(get_top_posts)
     })
     .bind("0.0.0.0:8000")?
     .run()

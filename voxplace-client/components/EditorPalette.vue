@@ -46,8 +46,8 @@
 
 <script setup>
 const route = useRoute();
-let palette = ref([]);
 
+let palette = ref([]);
 let selectedColor = ref('');
 let selectedIndex = ref(-1);
 let selectedTool = ref(-1);

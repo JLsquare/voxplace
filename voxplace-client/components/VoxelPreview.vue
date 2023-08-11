@@ -5,6 +5,8 @@
 </template>
 
 <script setup>
+import * as THREE from 'three';
+
 const props = defineProps({
   voxel_id: {
     type: String,
@@ -15,27 +17,17 @@ const props = defineProps({
 const parentRef = ref(null);
 const canvasRef = ref(null);
 
-import * as THREE from 'three';
-
 let size;
 let chunkSize;
 let scene;
 let camera;
 let renderer;
 let cameraAngle = 0;
-const cameraSpeed = 0.5;
+let cameraSpeed = 0.5;
 let lastTime = 0;
-
-const invertedBoxGeometry = new THREE.BoxGeometry(size, size, size);
-invertedBoxGeometry.applyMatrix4(new THREE.Matrix4().makeScale(-1, -1, -1));
-const planeGeometry = new THREE.PlaneGeometry(size, size);
-planeGeometry.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
-
 let voxels = [];
 let palette = [];
 let chunks = [];
-
-const raycaster = new THREE.Raycaster();
 let needsUpdate = [];
 
 onMounted(() => {

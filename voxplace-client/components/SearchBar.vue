@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-white border-2 border-black rounded-2xl w-full flex justify-between items-center px-4 shadow-custom">
+  <div class="bg-white border-2 border-black rounded-2xl flex justify-between items-center px-4 shadow-custom">
     <input
         type="text"
         v-model="searchQuery"

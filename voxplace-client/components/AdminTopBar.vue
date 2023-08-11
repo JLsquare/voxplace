@@ -20,6 +20,7 @@
 
 <script setup>
 let selectedItem = ref(0)
+
 const positions = ['-left-5', '', '-right-5'];
 
 const props = defineProps({

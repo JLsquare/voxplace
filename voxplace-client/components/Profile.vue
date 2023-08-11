@@ -1,5 +1,5 @@
 <template>
-  <div v-if="profile" class="bg-white border-2 border-black rounded-2xl shadow-custom w-fit p-8">
+  <div v-if="profile" class="bg-white border-2 border-black rounded-2xl shadow-custom h-fit p-8">
     <div class="bg-white border-2 border-black rounded-2xl w-[24rem] h-[24rem] flex justify-between items-center shadow-custom relative">
       <VoxelPreview :voxel_id="profile.voxel_id"/>
     </div>

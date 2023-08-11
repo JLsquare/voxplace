@@ -40,7 +40,6 @@ let invalidEmail = ref(false);
 let invalidPassword = ref(false);
 
 const emailRegex = /^[\w-]+(\.[\w-]+)*@([\w-]+\.)+[a-zA-Z]{2,7}$/;
-
 const emit = defineEmits(['login-clicked', 'close-clicked', 'signed-up']);
 
 async function signup() {

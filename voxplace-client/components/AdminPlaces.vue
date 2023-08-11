@@ -67,7 +67,7 @@ async function createPlace() {
     const message = await response.text();
     console.log(message);
   } else {
-    getPlaces();
+    await getPlaces();
   }
 }
 </script>

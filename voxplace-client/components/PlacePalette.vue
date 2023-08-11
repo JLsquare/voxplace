@@ -22,11 +22,14 @@
 
 <script setup>
 const route = useRoute();
+
 let palette = ref([]);
 let selectedColor = ref('');
 let opened = ref(false);
 let cooldown = ref(60);
 let currentTime = ref(Date.now());
+
+const emit = defineEmits(['drawed']);
 
 onMounted(() => {
   getPalette();
@@ -83,8 +86,6 @@ const props = defineProps({
     required: true
   },
 })
-
-const emit = defineEmits(['drawed']);
 
 async function sendVoxel() {
   let colorIndex = selectedColor.value === 'remove' ? 0 : palette.value.indexOf(selectedColor.value) + 1;

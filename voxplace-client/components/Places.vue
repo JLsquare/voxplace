@@ -3,7 +3,12 @@
     <div class="bg-black w-[33rem] lg:w-[65rem] 2xl:w-[97rem] h-0.5 mt-4"></div>
     <div class="overflow-y-scroll overflow-hidden block h-full scrollbar-hide">
       <div class="grid grid-cols-1 2xl:grid-cols-2 gap-16 p-4">
-        <PlacePost v-for="place in places" :key="place.id" :name="place.name" :place_id="place.place_id" :voxel_id="place.voxel_id" online/>
+        <Place
+            v-for="place in places"
+            :name="place.name"
+            :place_id="place.place_id"
+            :voxel_id="place.voxel_id"
+            online/>
       </div>
     </div>
   </div>

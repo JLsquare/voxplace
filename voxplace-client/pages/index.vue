@@ -1,17 +1,17 @@
 <template>
-  <div class="flex flex-col justify-center items-center font-roboto">
-    <IndexTopBar :auth-button-index="authId" :is-auth="isAuth" @login-clicked="handleLoginClicked" @posts-pressed="setTab(0)" @places-pressed="setTab(1)" @users-pressed="setTab(2)" class="z-10" />
-    <div class=" mx-16 w-full flex flex-col items-center h-full">
-      <div class="flex justify-center items-center mt-4 w-[37rem] flex-col z-10">
-        <SearchBar />
+  <div class="font-roboto h-screen">
+    <IndexTopBar :auth-button-index="authId" :is-auth="isAuth" @login-clicked="handleLoginClicked" @posts-pressed="setTab(0)" @places-pressed="setTab(1)" @users-pressed="setTab(2)" />
+    <div style="height: calc(100% - 10.25rem);">
+      <div class="flex justify-center items-center mt-4 flex-col w-full">
+        <SearchBar class="w-[37rem]"/>
         <div class="flex space-x-8 justify-center mt-4">
           <Button text="Top" class="bg-white hover:bg-neutral-200 w-44"/>
           <Button text="Following" disabled class="w-44"/>
           <Button text="New" class="bg-white hover:bg-neutral-200 w-44"/>
         </div>
       </div>
-      <div class="w-screen h-screen absolute top-0 pt-[10.5rem]">
-        <Voxels v-if="currentTab === 0"/>
+      <div class="h-full">
+        <Posts v-if="currentTab === 0"/>
         <Places v-if="currentTab === 1"/>
         <Users v-if="currentTab === 2"/>
       </div>

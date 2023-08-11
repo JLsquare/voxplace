@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-white border-2 border-black rounded-2xl shadow-custom w-fit p-8">
+  <div class="bg-white border-2 border-black rounded-2xl shadow-custom h-fit p-8">
     <NuxtLink :to="'/editor/' + profile.voxel_id" class="w-full h-full">
       <div class="bg-white border-2 border-black rounded-2xl w-[24rem] h-[24rem] flex justify-between items-center shadow-custom relative cursor-pointer">
         <VoxelPreview :voxel_id="profile.voxel_id"/>
@@ -86,14 +86,14 @@ let passwordNotMatch = ref(false);
 let passwordTooShort = ref(false);
 let wrongCredentials = ref(false);
 
+const emit = defineEmits(['close'])
+
 const props = defineProps({
   profile: {
     type: Object,
     required: true
   }
 })
-
-const emit = defineEmits(['close'])
 
 function cancel(){
   if(changeUsername.value || changeEmail.value || changePassword.value){

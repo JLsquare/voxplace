@@ -1,6 +1,18 @@
 use rusqlite::params;
+use serde_derive::Serialize;
 use crate::database::db::{Database, DatabaseError};
 use crate::post::Post;
+
+#[derive(Serialize)]
+pub struct PostInfo {
+    pub post_id: String,
+    pub title: String,
+    pub content: String,
+    pub voxel_id: String,
+    pub votes: i64,
+    pub author_id: String,
+    pub updated: bool,
+}
 
 impl Database {
     pub fn create_post_table(&self) -> Result<(), DatabaseError> {
@@ -13,7 +25,9 @@ impl Database {
                 voxel_id INTEGER NOT NULL,
                 votes INTEGER NOT NULL DEFAULT 0,
                 author_id INTEGER NOT NULL,
+                updated INTEGER NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
                 FOREIGN KEY (author_id) REFERENCES user(id)
                 FOREIGN KEY (voxel_id) REFERENCES voxel(id)
             )",
@@ -25,7 +39,7 @@ impl Database {
     pub fn save_new_post(&self, post: Post) -> Result<(), DatabaseError> {
         let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
         let mut stmt = conn.prepare(
-            "INSERT INTO post (id, title, content, voxel_id, author_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO post (id, title, content, voxel_id, author_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )?;
         stmt.execute(params![
             post.id,
@@ -34,24 +48,48 @@ impl Database {
             post.voxel_id,
             post.author_id,
             post.created_at,
+            post.updated_at,
         ])?;
         Ok(())
     }
 
-    pub fn get_top_posts(&self, limit: i64) -> Result<Vec<Post>, DatabaseError> {
+    pub fn get_top_posts(&self, limit: i64) -> Result<Vec<PostInfo>, DatabaseError> {
         let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, voxel_id, votes, author_id, created_at FROM post ORDER BY votes DESC LIMIT ?",
+            "SELECT id, title, content, voxel_id, votes, author_id, updated FROM post ORDER BY votes DESC LIMIT ?",
         )?;
         let rows = stmt.query_map([limit], |row| {
-            Ok(Post {
-                id: row.get(0)?,
+            Ok(PostInfo {
+                post_id: row.get::<_, i64>(0)?.to_string(),
                 title: row.get(1)?,
                 content: row.get(2)?,
-                voxel_id: row.get(3)?,
+                voxel_id: row.get::<_, i64>(3)?.to_string(),
                 votes: row.get(4)?,
-                author_id: row.get(5)?,
-                created_at: row.get(6)?,
+                author_id: row.get::<_, i64>(5)?.to_string(),
+                updated: row.get::<_, i64>(6)? == 1,
+            })
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    pub fn get_top_user_posts(&self, user_id: i64, limit: i64) -> Result<Vec<PostInfo>, DatabaseError> {
+        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, title, content, voxel_id, votes, author_id, updated FROM post WHERE author_id = ? ORDER BY votes DESC LIMIT ?",
+        )?;
+        let rows = stmt.query_map([user_id, limit], |row| {
+            Ok(PostInfo {
+                post_id: row.get::<_, i64>(0)?.to_string(),
+                title: row.get(1)?,
+                content: row.get(2)?,
+                voxel_id: row.get::<_, i64>(3)?.to_string(),
+                votes: row.get(4)?,
+                author_id: row.get::<_, i64>(5)?.to_string(),
+                updated: row.get::<_, i64>(6)? == 1,
             })
         })?;
         let mut result = Vec::new();

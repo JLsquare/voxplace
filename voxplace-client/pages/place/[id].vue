@@ -20,25 +20,24 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 
 const route = useRoute();
+
 let size = 0;
 let chunkSize = 0;
-const moveSpeed = 0.5;
+let moveSpeed = 0.5;
 let scene;
 let camera;
 let renderer;
 let controls;
 let loader;
 let infoBarText = ref('(0, 0, 0)   Empty / Server');
-
 let voxels = [];
 let palette = [];
 let selectMesh = null;
 let previewLeftClickMesh = null;
 let previewRightClickMesh = null;
 let chunks = [];
-
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
+let raycaster = new THREE.Raycaster();
+let mouse = new THREE.Vector2();
 let mouseDown = new THREE.Vector2();
 let mouseUp = new THREE.Vector2();
 let clickCount = 0;
@@ -52,16 +51,12 @@ let yUpdate = 0;
 let zUpdate = 0;
 let socket;
 
-onMounted(() => {
-  init();
-})
-
-async function init() {
+onMounted(async () => {
   await initPalette();
   await initVoxelData();
   initSocket();
   addEventListeners();
-}
+})
 
 function initSocket() {
   socket = new WebSocket(`ws://${window.location.hostname}:8000/api/place/ws/${route.params.id}`);

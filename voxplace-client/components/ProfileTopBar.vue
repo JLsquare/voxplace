@@ -22,7 +22,15 @@
 
 <script setup>
 let selectedItem = ref(0)
+
 const positions = ['-left-5', '', '-right-5'];
+
+const props = defineProps({
+  isMe: {
+    type: Boolean,
+    default: false
+  }
+})
 
 const underlinePosition = computed(() => {
   return positions[selectedItem.value];
@@ -31,11 +39,4 @@ const underlinePosition = computed(() => {
 function logout(){
   localStorage.removeItem('token');
 }
-
-const props = defineProps({
-  isMe: {
-    type: Boolean,
-    default: false
-  }
-});
 </script>
