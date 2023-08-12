@@ -1,8 +1,18 @@
+use std::io::Write;
 use crate::websocket::PlaceWebSocketConnection;
 use actix::{Addr, Message};
 use crossbeam::atomic::AtomicCell;
-use rand::Rng;
-use std::sync::{Mutex};
+use rand::{Rng, thread_rng};
+use std::sync::{Mutex, RwLock};
+use actix_web::{get, HttpRequest, HttpResponse, post, Responder, web};
+use actix_web::http::header;
+use actix_web::web::{Data, Json, Path};
+use chrono::Utc;
+use flate2::Compression;
+use flate2::write::GzEncoder;
+use serde_derive::Deserialize;
+use crate::app_state::AppState;
+use crate::user::check_user;
 
 #[derive(Message, Clone, Copy)]
 #[rtype(result = "()")]
@@ -38,8 +48,8 @@ impl Voxel {
             grid,
             palette_id,
             sessions: Mutex::new(Vec::new()),
-            created_at: created_at.unwrap_or_else(|| chrono::Utc::now().timestamp()),
-            last_modified_at: last_modified_at.unwrap_or_else(|| chrono::Utc::now().timestamp()),
+            created_at: created_at.unwrap_or_else(|| Utc::now().timestamp()),
+            last_modified_at: last_modified_at.unwrap_or_else(|| Utc::now().timestamp()),
         }
     }
 
@@ -130,5 +140,155 @@ impl Voxel {
             }
         }
         grid_data.into_iter().map(AtomicCell::new).collect()
+    }
+}
+
+#[derive(Deserialize)]
+struct CreateVoxelRequest {
+    name: String,
+    size: (usize, usize, usize),
+}
+
+#[get("/api/voxel/all/{id}")]
+async fn get_voxel(
+    data: Data<RwLock<AppState>>,
+    path: Path<String>
+) -> impl Responder {
+    let id = match path.into_inner().parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => return HttpResponse::BadRequest().body("Invalid place"),
+    };
+
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
+
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read database"),
+    };
+
+    let voxel = match db.get_voxel(id) {
+        Ok(info) => info,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read voxel info"),
+    };
+
+    let grid: Vec<u8> = voxel.grid.iter().map(|cell| cell.load()).collect();
+
+    let mut e = GzEncoder::new(Vec::new(), Compression::default());
+    match e.write_all(&grid) {
+        Ok(_) => (),
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to compress data"),
+    };
+
+    let compressed_data = match e.finish() {
+        Ok(data) => data,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to compress data"),
+    };
+
+    HttpResponse::Ok()
+        .append_header((header::CONTENT_ENCODING, "gzip"))
+        .body(compressed_data)
+}
+
+#[post("/api/voxel/save/{id}")]
+async fn save_voxel(
+    data: Data<RwLock<AppState>>,
+    path: Path<String>,
+    body: web::Bytes,
+) -> impl Responder {
+    let id = match path.into_inner().parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => return HttpResponse::BadRequest().body("Invalid voxel"),
+    };
+
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
+
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read database"),
+    };
+
+    let grid = body.to_vec();
+
+    match db.save_voxel_grid(id, grid) {
+        Ok(_) => (),
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to save voxel grid"),
+    };
+
+    HttpResponse::Ok().body("Voxel saved")
+}
+
+#[get("/api/voxel/user/{user_id}")]
+async fn get_user_voxels(
+    data: Data<RwLock<AppState>>,
+    path: Path<String>,
+    req: HttpRequest,
+) -> impl Responder {
+    let path = path.into_inner();
+    let user_id = if path == "me" {
+        match check_user(req) {
+            Ok(id) => id,
+            Err(_) => return HttpResponse::Unauthorized().body("Unauthorized"),
+        }
+    } else {
+        match path.parse::<i64>() {
+            Ok(id) => id,
+            Err(_) => return HttpResponse::BadRequest().body("Invalid user"),
+        }
+    };
+
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
+
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to lock database"),
+    };
+
+    let voxels = match db.get_user_voxels(user_id) {
+        Ok(voxels) => voxels,
+        Err(e) => return HttpResponse::InternalServerError().body(format!("Failed to get user voxels : {}", e)),
+    };
+
+    HttpResponse::Ok().json(voxels)
+}
+
+#[post("/api/voxel/create")]
+async fn create_voxel(
+    data: Data<RwLock<AppState>>,
+    req: HttpRequest,
+    json: Json<CreateVoxelRequest>,
+) -> impl Responder {
+    let user_id = match check_user(req) {
+        Ok(id) => id,
+        Err(res) => return res,
+    };
+
+    let voxel_id = thread_rng().gen::<i64>();
+
+    let voxel = Voxel::new(voxel_id, &json.name, 0, json.size, None, None, None);
+
+    let mut app_state = match data.write() {
+        Ok(app_state) => app_state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to lock app state"),
+    };
+
+    app_state.add_voxel(voxel);
+
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to lock database"),
+    };
+
+    match db.save_new_user_voxel(user_id, voxel_id) {
+        Ok(_) => HttpResponse::Ok().json("Voxel user link created"),
+        Err(e) => HttpResponse::InternalServerError().body(format!("Failed to create voxel user link : {}", e)),
     }
 }

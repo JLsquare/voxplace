@@ -45,5 +45,6 @@ impl Database {
         self.create_place_user_cooldown_table().unwrap();
         self.create_user_voxel_table().unwrap();
         self.create_post_table().unwrap();
+        self.create_comment_table().unwrap();
     }
 }

@@ -99,6 +99,26 @@ impl Database {
         Ok(result)
     }
 
+    pub fn get_post(&self, post_id: i64) -> Result<PostInfo, DatabaseError> {
+        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, title, content, voxel_id, votes, author_id, updated FROM post WHERE id = ?",
+        )?;
+        let mut rows = stmt.query_map([post_id], |row| {
+            Ok(PostInfo {
+                post_id: row.get::<_, i64>(0)?.to_string(),
+                title: row.get(1)?,
+                content: row.get(2)?,
+                voxel_id: row.get::<_, i64>(3)?.to_string(),
+                votes: row.get(4)?,
+                author_id: row.get::<_, i64>(5)?.to_string(),
+                updated: row.get::<_, i64>(6)? == 1,
+            })
+        })?;
+        let result = rows.next().unwrap()?;
+        Ok(result)
+    }
+
     pub fn vote_post(&self, post_id: i64, vote: i64) -> Result<(), DatabaseError> {
         let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
         conn.execute(

@@ -1,6 +1,6 @@
 use crate::database::db::{Database, DatabaseError};
 use crate::place::Place;
-use rusqlite::{params, Error};
+use rusqlite::params;
 use serde_derive::Serialize;
 
 #[derive(Clone, Serialize, Debug)]

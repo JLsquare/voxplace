@@ -1,3 +1,8 @@
+use std::sync::RwLock;
+use actix_web::{get, HttpResponse, Responder};
+use actix_web::web::{Data, Path};
+use crate::app_state::AppState;
+
 pub struct Palette {
     palette_id: i64,
     colors: Vec<(u8, u8, u8)>,
@@ -59,4 +64,37 @@ impl Palette {
     pub fn colors(&self) -> &Vec<(u8, u8, u8)> {
         &self.colors
     }
+}
+
+#[get("/api/palette/get/{id}")]
+async fn get_palette(
+    data: Data<RwLock<AppState>>,
+    path: Path<String>
+) -> impl Responder {
+    let id = match path.into_inner().parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => return HttpResponse::BadRequest().body("Invalid voxel"),
+    };
+
+    let app_state = match data.read() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
+    };
+
+    let db = match app_state.database.lock() {
+        Ok(db) => db,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read database"),
+    };
+
+    let palette = match db.get_palette(id) {
+        Ok(palette) => palette,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to read palette"),
+    };
+
+    let palette_hex: Vec<String> = palette
+        .iter()
+        .map(|&(r, g, b)| format!("#{:02x}{:02x}{:02x}", r, g, b))
+        .collect();
+
+    HttpResponse::Ok().json(palette_hex)
 }

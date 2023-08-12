@@ -5,13 +5,18 @@
       <Post
           v-for="post in posts"
           :post="post"
+          @open-post="openPost"
       />
     </div>
+    <div v-if="postOpen" class="w-screen h-screen bg-black absolute top-0 opacity-20 z-10"></div>
+    <OpenedPost :post_id="selectedPost.post_id" v-if="postOpen" @close-post="postOpen = false" class="z-10 absolute top-24"/>
   </div>
 </template>
 
 <script setup>
 let posts = ref([]);
+let selectedPost = ref(null);
+let postOpen = ref(false);
 
 const props = defineProps({
   user_id: {
@@ -27,6 +32,11 @@ const props = defineProps({
 onMounted(async () => {
   await getPosts();
 });
+
+function openPost(post){
+  selectedPost.value = post;
+  postOpen.value = true;
+}
 
 async function getPosts(){
   const token = localStorage.getItem('token');

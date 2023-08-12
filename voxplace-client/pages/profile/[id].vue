@@ -116,7 +116,7 @@ async function getProfile() {
 async function createVoxel(){
   const token = localStorage.getItem('token');
 
-  let res = await fetch(`http://${window.location.hostname}:8000/api/user/voxels/create`, {
+  let res = await fetch(`http://${window.location.hostname}:8000/api/voxel/create`, {
     method: 'POST',
     headers: {
       'Authorization': token,
@@ -139,7 +139,7 @@ async function createVoxel(){
 async function getVoxels(){
   const token = localStorage.getItem('token');
 
-  let res = await fetch(`http://${window.location.hostname}:8000/api/user/voxels/all`, {
+  let res = await fetch(`http://${window.location.hostname}:8000/api/voxel/user/${route.params.id}`, {
     headers: {
       'Authorization': token
     }

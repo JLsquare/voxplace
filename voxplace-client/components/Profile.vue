@@ -9,7 +9,7 @@
           <div class="bg-blue-300 border-2 border-black rounded-full w-6 h-6 mt-1"/>
           <p class="text-2xl ml-4">{{ profile.username }}</p>
         </div>
-        <TinyButton v-if="!isMe" text="Follow" class="bg-blue-300 hover:bg-blue-400 ml-4"/>
+        <TinyButton v-if="!isMe" text="Follow" disabled class="bg-blue-300 hover:bg-blue-400 ml-4"/>
         <TinyButton v-if="isMe" @click="$emit('edit-profile-pressed')" text="Edit Profile" class="bg-blue-300 hover:bg-blue-400 ml-4"/>
       </div>
       <p class="text-xl mt-4">Joined: {{ unixTimestampToReadableDate(profile.created_at) }}</p>

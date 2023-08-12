@@ -7,7 +7,7 @@
           <div class="bg-blue-300 border-2 border-black rounded-full h-6 w-6 ml-2"></div>
           <p class="ml-2 text-xl">{{ username }}</p>
         </div>
-        <TinyButton text="Follow" class="bg-blue-300 hover:bg-blue-400 mr-2"></TinyButton>
+        <TinyButton text="Follow" disabled class="bg-blue-300 hover:bg-blue-400 mr-2"></TinyButton>
       </div>
     </div>
   </NuxtLink>

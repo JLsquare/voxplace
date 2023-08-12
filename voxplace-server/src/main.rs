@@ -1,19 +1,25 @@
 mod app_state;
 mod database;
 mod place;
-mod routes;
 mod voxel;
 mod websocket;
 mod palette;
 mod post;
+mod comment;
+mod user;
 
 use crate::app_state::AppState;
 use crate::database::db::Database;
-use crate::routes::{check_admin, create_place, create_post, create_user_voxel, draw_voxel_http, edit_user, get_cooldown, get_grid, get_palette, get_places_info, get_top_posts, get_top_users, get_user_profile, get_user_voxels, get_username, get_voxel, login_user, register_user, save_voxel, ws_index};
 use actix_cors::Cors;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer};
 use std::sync::RwLock;
+use crate::comment::{create_comment, get_place_comments, get_post_comments};
+use crate::palette::get_palette;
+use crate::place::{create_place, draw_voxel_http, get_cooldown, get_grid, get_places_info, get_username, ws_index};
+use crate::post::{create_post, get_post, get_top_posts};
+use crate::user::{check_admin, edit_user, get_top_users, get_user_profile, login_user, register_user};
+use crate::voxel::{create_voxel, get_user_voxels, get_voxel, save_voxel};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -50,9 +56,13 @@ async fn main() -> std::io::Result<()> {
             .service(save_voxel)
             .service(get_top_users)
             .service(get_user_voxels)
-            .service(create_user_voxel)
+            .service(create_voxel)
             .service(create_post)
             .service(get_top_posts)
+            .service(get_post_comments)
+            .service(get_place_comments)
+            .service(create_comment)
+            .service(get_post)
     })
     .bind("0.0.0.0:8000")?
     .run()

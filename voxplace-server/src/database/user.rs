@@ -2,6 +2,7 @@ use crate::database::db::{Database, DatabaseError};
 use bcrypt::verify;
 use rusqlite::params;
 use serde_derive::Serialize;
+use crate::user::User;
 
 #[derive(Serialize)]
 pub struct UserProfile {
@@ -47,13 +48,7 @@ impl Database {
 
     pub fn register_user(
         &self,
-        user_id: i64,
-        username: &str,
-        email: &str,
-        voxel_id: i64,
-        password_hash: &str,
-        created_at: i64,
-        last_connected_at: i64,
+        user: User,
     ) -> Result<i64, DatabaseError> {
         let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
         let mut stmt = conn.prepare(
@@ -68,13 +63,13 @@ impl Database {
             ) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )?;
         stmt.execute(params![
-            user_id,
-            username,
-            password_hash,
-            email,
-            voxel_id,
-            created_at,
-            last_connected_at
+            user.user_id,
+            user.username,
+            user.password_hash,
+            user.email,
+            user.voxel_id,
+            user.created_at,
+            user.last_connected_at
         ])?;
 
         Ok(conn.last_insert_rowid())

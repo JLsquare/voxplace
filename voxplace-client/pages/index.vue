@@ -15,12 +15,13 @@
         <Places v-if="currentTab === 1"/>
         <Users v-if="currentTab === 2"/>
       </div>
-      <div v-if="(showLogin || showSignUp) && !isAuth" class="w-screen h-screen bg-black absolute top-0 opacity-20 z-10"></div>
+      <div v-if="(showLogin || showSignUp) && !isAuth" class="w-screen h-screen bg-black absolute top-0 bg-opacity-20 justify-center flex items-center z-10">
+        <LogIn v-if="showLogin && !isAuth" @signup-clicked="showSignUp = true; showLogin = false; authId = 1" @close-clicked="showLogin = false" @logged-in="isAuth = true"/>
+        <SignUp v-if="showSignUp && !isAuth" @login-clicked="showLogin = true; showSignUp = false; authId = 0" @close-clicked="showSignUp = false" @signed-up="isAuth = true"/>
+      </div>
     </div>
-    <div class="w-[28rem] z-10">
-      <LogIn v-if="showLogin && !isAuth" @signup-clicked="showSignUp = true; showLogin = false; authId = 1" @close-clicked="showLogin = false" @logged-in="isAuth = true"/>
-      <SignUp v-if="showSignUp && !isAuth" @login-clicked="showLogin = true; showSignUp = false; authId = 0" @close-clicked="showSignUp = false" @signed-up="isAuth = true"/>
-    </div>
+    <div class="z-10 absolute top-0 ite">
+      </div>
   </div>
 </template>
 
