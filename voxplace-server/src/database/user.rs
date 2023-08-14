@@ -27,8 +27,7 @@ pub struct FullUserProfile {
 
 impl Database {
     pub fn create_user_table(&self) -> Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
-        conn.execute(
+        self.get_conn()?.execute(
             "CREATE TABLE IF NOT EXISTS User (
                 user_id INTEGER PRIMARY KEY,
                 username TEXT NOT NULL UNIQUE,
@@ -49,8 +48,8 @@ impl Database {
     pub fn register_user(
         &self,
         user: User,
-    ) -> Result<i64, DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+    ) -> Result<(), DatabaseError> {
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             "INSERT OR REPLACE INTO User (
                 user_id,
@@ -72,11 +71,11 @@ impl Database {
             user.last_connected_at
         ])?;
 
-        Ok(conn.last_insert_rowid())
+        Ok(())
     }
 
     pub fn login_user(&self, username: &str, password: &str) -> Result<i64, DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare("SELECT user_id, password_hash FROM User WHERE username = ?")?;
         let mut rows = stmt.query(params![username])?;
 
@@ -95,7 +94,7 @@ impl Database {
     }
 
     pub fn is_admin(&self, user_id: i64) -> Result<bool, DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare("SELECT admin FROM User WHERE user_id = ?")?;
         let mut rows = stmt.query(params![user_id])?;
 
@@ -109,35 +108,35 @@ impl Database {
     }
 
     pub fn update_username(&self, user_id: i64, new_username: &str) -> Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare("UPDATE User SET username = ? WHERE user_id = ?")?;
         stmt.execute(params![new_username, user_id])?;
         Ok(())
     }
 
     pub fn update_email(&self, user_id: i64, new_email: &str) -> Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare("UPDATE User SET email = ? WHERE user_id = ?")?;
         stmt.execute(params![new_email, user_id])?;
         Ok(())
     }
 
     pub fn update_password(&self, user_id: i64, new_password_hash: &str) -> Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare("UPDATE User SET password_hash = ? WHERE user_id = ?")?;
         stmt.execute(params![new_password_hash, user_id])?;
         Ok(())
     }
 
     pub fn update_last_connected_at(&self, user_id: i64, new_last_connected_at: i64) -> Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare("UPDATE User SET last_connected_at = ? WHERE user_id = ?")?;
         stmt.execute(params![new_last_connected_at, user_id])?;
         Ok(())
     }
 
     pub fn get_username(&self, user_id: i64) -> Result<String, DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare("SELECT username FROM User WHERE user_id = ?")?;
         let mut rows = stmt.query(params![user_id])?;
         if let Some(row) = rows.next()? {
@@ -149,7 +148,7 @@ impl Database {
     }
 
     pub fn get_user_profile(&self, user_id: i64) -> Result<UserProfile, DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare("SELECT user_id, username, voxel_id, xp, created_at, last_connected_at FROM User WHERE user_id = ?")?;
         let mut rows = stmt.query(params![user_id])?;
         if let Some(row) = rows.next()? {
@@ -173,7 +172,7 @@ impl Database {
     }
 
     pub fn get_full_user_profile(&self, user_id: i64) -> Result<FullUserProfile, DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare("SELECT user_id, username, voxel_id, xp, created_at, last_connected_at, email FROM User WHERE user_id = ?")?;
         let mut rows = stmt.query(params![user_id])?;
         if let Some(row) = rows.next()? {
@@ -199,7 +198,7 @@ impl Database {
     }
 
     pub fn get_top_users(&self, limit: i64) -> Result<Vec<UserProfile>, DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare("SELECT user_id, username, voxel_id, xp, created_at, last_connected_at FROM User ORDER BY xp DESC LIMIT ?")?;
         let mut rows = stmt.query(params![limit])?;
         let mut users = Vec::new();

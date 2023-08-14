@@ -17,7 +17,7 @@ use std::sync::RwLock;
 use crate::comment::{create_comment, get_place_comments, get_post_comments};
 use crate::palette::get_palette;
 use crate::place::{create_place, draw_voxel_http, get_cooldown, get_grid, get_places_info, get_username, ws_index};
-use crate::post::{create_post, get_post, get_top_posts};
+use crate::post::{create_post, get_new_posts, get_post, get_top_posts, vote_post};
 use crate::user::{check_admin, edit_user, get_top_users, get_user_profile, login_user, register_user};
 use crate::voxel::{create_voxel, get_user_voxels, get_voxel, save_voxel};
 
@@ -63,6 +63,8 @@ async fn main() -> std::io::Result<()> {
             .service(get_place_comments)
             .service(create_comment)
             .service(get_post)
+            .service(get_new_posts)
+            .service(vote_post)
     })
     .bind("0.0.0.0:8000")?
     .run()

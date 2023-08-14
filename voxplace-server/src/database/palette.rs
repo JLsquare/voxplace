@@ -4,8 +4,7 @@ use crate::palette::Palette;
 
 impl Database {
     pub fn create_palette_table(&self) -> rusqlite::Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
-        conn.execute(
+        self.get_conn()?.execute(
             "CREATE TABLE IF NOT EXISTS Palette (
                 palette_id INTEGER PRIMARY KEY,
                 colors BLOB NOT NULL
@@ -24,7 +23,7 @@ impl Database {
             bytes.push(color.2);
         }
 
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             "INSERT OR REPLACE INTO Palette (
                 palette_id,
@@ -40,7 +39,7 @@ impl Database {
     }
 
     pub fn get_palette(&self, palette_id: i64) -> rusqlite::Result<Vec<(u8, u8, u8)>, DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             "SELECT colors FROM Palette WHERE palette_id = ?",
         )?;

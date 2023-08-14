@@ -26,8 +26,7 @@ pub struct PlaceInfo {
 
 impl Database {
     pub fn create_place_table(&self) -> Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
-        conn.execute(
+        self.get_conn()?.execute(
             "CREATE TABLE IF NOT EXISTS Place (
                 place_id INTEGER PRIMARY KEY,
                 online INTEGER NOT NULL,
@@ -42,8 +41,7 @@ impl Database {
     }
 
     pub fn create_place_user_table(&self) -> Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
-        conn.execute(
+        self.get_conn()?.execute(
             "CREATE TABLE IF NOT EXISTS PlaceUser (
                 place_id INTEGER NOT NULL,
                 user_id INTEGER NOT NULL,
@@ -59,8 +57,7 @@ impl Database {
     }
 
     pub fn create_place_user_cooldown_table(&self) -> Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
-        conn.execute(
+        self.get_conn()?.execute(
             "CREATE TABLE IF NOT EXISTS PlaceUserCooldown (
                 place_id INTEGER NOT NULL,
                 user_id INTEGER NOT NULL,
@@ -74,7 +71,7 @@ impl Database {
     }
 
     pub fn get_user_cooldown(&self, place_id: i64, user_id: i64) -> Result<i64, DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             "SELECT
                 cooldown
@@ -92,7 +89,7 @@ impl Database {
     }
 
     pub fn set_user_cooldown(&self, place_id: i64, user_id: i64, cooldown: i64) -> Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             "INSERT OR REPLACE INTO PlaceUserCooldown (
                 place_id,
@@ -106,7 +103,7 @@ impl Database {
     }
 
     pub fn save_new_place(&self, place: &Place) -> Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             "INSERT INTO Place (
                 place_id,
@@ -121,7 +118,7 @@ impl Database {
     }
 
     pub fn save_places_users(&self, updates: Vec<PlaceUserUpdate>) -> Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             "INSERT OR REPLACE INTO PlaceUser (
                 place_id,
@@ -146,7 +143,7 @@ impl Database {
     }
 
     pub fn get_places_infos(&self) -> Result<Vec<PlaceInfo>, DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             "SELECT
                 Place.place_id,
@@ -179,7 +176,7 @@ impl Database {
 
 
     pub fn get_place_user(&self, place_id: i64, x: i64, y: i64, z: i64) -> Result<i64, DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             "SELECT
             user_id

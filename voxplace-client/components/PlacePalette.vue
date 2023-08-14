@@ -13,7 +13,7 @@
           @click="selectedColor = 'remove'; sendVoxel(); opened = false"
           class="w-8 h-8 rounded-lg cursor-pointer hover:border-2 border border-black"
           style="background-image: url(/remove.png); background-size: cover"></div>
-      <CloseButton class="order-last p-0.5" size="28"/>
+      <CloseButton class="order-last p-0.5" size="28" strockWidth="1.5"/>
     </div>
     <Button text="Submit" id="edit-voxel-btn" v-if="!opened && !isCooldownActive" @click="opened = true" class="bg-white hover:bg-neutral-200"/>
     <Button disabled :text="remainingCooldown + ' seconds'" v-if="isCooldownActive" class="bg-white hover:bg-neutral-200"/>

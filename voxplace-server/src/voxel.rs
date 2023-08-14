@@ -39,7 +39,7 @@ impl Voxel {
         created_at: Option<i64>,
         last_modified_at: Option<i64>,
     ) -> Self {
-        let grid = grid.unwrap_or_else(|| Voxel::generate_empty_grid(grid_size));
+        let grid = grid.unwrap_or_else(|| Voxel::generate_random_grid(grid_size));
 
         Self {
             id,
@@ -111,6 +111,7 @@ impl Voxel {
         x * self.grid_size.0 * self.grid_size.0 + y * self.grid_size.1 + z
     }
 
+    #[allow(dead_code)]
     fn generate_random_grid(grid_size: (usize, usize, usize)) -> Vec<AtomicCell<u8>> {
         let mut rng = rand::thread_rng();
         let mut grid_data = Vec::new();

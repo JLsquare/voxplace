@@ -1,5 +1,5 @@
 use rusqlite::Connection;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -19,8 +19,14 @@ pub enum DatabaseError {
     #[error("No such palette")]
     NoSuchPalette(),
 
+    #[error("No such post")]
+    NoSuchPost(),
+
     #[error("Error during database lock: {0}")]
     LockError(String),
+
+    #[error("Invalid vote")]
+    InvalidVote(),
 }
 
 pub struct Database {
@@ -46,5 +52,10 @@ impl Database {
         self.create_user_voxel_table().unwrap();
         self.create_post_table().unwrap();
         self.create_comment_table().unwrap();
+    }
+
+    pub fn get_conn(&self) -> Result<MutexGuard<Connection>, DatabaseError> {
+        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        Ok(conn)
     }
 }

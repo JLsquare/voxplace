@@ -16,8 +16,7 @@ pub struct UserVoxel {
 
 impl Database {
     pub fn create_voxel_table(&self) -> rusqlite::Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
-        conn.execute(
+        self.get_conn()?.execute(
             "CREATE TABLE IF NOT EXISTS Voxel (
                 voxel_id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -36,8 +35,7 @@ impl Database {
     }
 
     pub fn create_user_voxel_table(&self) -> rusqlite::Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
-        conn.execute(
+        self.get_conn()?.execute(
             "CREATE TABLE IF NOT EXISTS UserVoxel (
                 user_id INTEGER NOT NULL,
                 voxel_id INTEGER NOT NULL,
@@ -50,7 +48,7 @@ impl Database {
     }
 
     pub fn save_new_user_voxel(&self, user_id: i64, voxel_id: i64) -> rusqlite::Result<(), DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             "INSERT OR REPLACE INTO UserVoxel (
                 user_id,
@@ -62,7 +60,7 @@ impl Database {
     }
 
     pub fn get_user_voxels(&self, user_id: i64) -> rusqlite::Result<Vec<UserVoxel>, DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             "SELECT V.voxel_id, V.name
              FROM UserVoxel UV
@@ -96,7 +94,7 @@ impl Database {
         let compressed_data = encoder.finish().expect("Failed to finish compression");
         bytes.extend(compressed_data);
 
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             "INSERT OR REPLACE INTO Voxel (
                 voxel_id,
@@ -125,7 +123,7 @@ impl Database {
     }
 
     pub fn get_voxel(&self, id: i64) -> rusqlite::Result<Voxel, DatabaseError> {
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             "SELECT
                 voxel_id,
@@ -173,7 +171,7 @@ impl Database {
 
     pub fn save_voxel_grid(&self, id: i64, grid: Vec<u8>) -> rusqlite::Result<(), DatabaseError> {
         let compressed_data = Self::compress_grid(&grid)?;
-        let conn = self.conn.lock().map_err(|e| DatabaseError::LockError(e.to_string()))?;
+        let conn = self.get_conn()?;
         conn.prepare("UPDATE Voxel SET grid = ?1 WHERE voxel_id = ?2")?
             .execute(params![compressed_data, id])?;
         Ok(())
