@@ -1,11 +1,11 @@
 <template>
   <div class="m-0 flex flex-col justify-center items-center h-screen font-roboto">
     <EditorTopBar />
-    <div class="flex w-screen h-full px-8 py-4 space-x-8">
-      <div class="h-full w-1/3">
+    <div class="flex w-screen px-8 py-4 space-x-8 h-[calc(100%-4rem)]">
+      <div class="w-1/3">
         <EditorPalette @selection-changed="selectionChanged" @save="saveVoxelData"/>
       </div>
-      <div class="border-2 border-black rounded-2xl h-full w-2/3 shadow-custom">
+      <div class="border-2 border-black rounded-2xl w-2/3 shadow-custom">
         <div ref="parentRef" class="h-full w-full rounded-2xl">
           <canvas ref="canvasRef" class="rounded-2xl" />
         </div>

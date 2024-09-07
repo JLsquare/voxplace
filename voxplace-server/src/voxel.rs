@@ -1,16 +1,17 @@
 use std::io::Write;
-use crate::websocket::PlaceWebSocketConnection;
-use actix::{Addr, Message};
+use actix::Message;
 use crossbeam::atomic::AtomicCell;
 use rand::{Rng, thread_rng};
 use std::sync::{Mutex, RwLock};
 use actix_web::{get, HttpRequest, HttpResponse, post, Responder, web};
 use actix_web::http::header;
 use actix_web::web::{Data, Json, Path};
+use actix_ws::Session;
 use chrono::Utc;
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use serde_derive::Deserialize;
+use serde_json::json;
 use crate::app_state::AppState;
 use crate::user::check_user;
 
@@ -26,7 +27,7 @@ pub struct Voxel {
     pub palette_id: i64,
     pub created_at: i64,
     pub last_modified_at: i64,
-    sessions: Mutex<Vec<Addr<PlaceWebSocketConnection>>>,
+    sessions: Mutex<Vec<Session>>,
 }
 
 impl Voxel {
@@ -96,14 +97,25 @@ impl Voxel {
         }
     }
 
-    pub fn add_session(&self, session: Addr<PlaceWebSocketConnection>) {
+    pub fn add_session(&self, session: Session) {
         self.sessions.lock().unwrap().push(session);
     }
 
     fn broadcast(&self, update_message: UpdateMessage) {
         let sessions = self.sessions.lock().unwrap();
         for session in sessions.iter() {
-            session.do_send(update_message);
+            let msg = serde_json::to_string(&json!({
+                "type": "update",
+                "x": update_message.0,
+                "y": update_message.1,
+                "z": update_message.2,
+                "color": update_message.3,
+            }))
+            .unwrap();
+            let mut cloned_session = session.clone();
+            actix_web::rt::spawn(async move {
+                let _ = cloned_session.text(msg).await;
+            });
         }
     }
 

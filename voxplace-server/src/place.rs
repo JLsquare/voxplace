@@ -1,10 +1,9 @@
 use std::io::Write;
 use crate::voxel::Voxel;
 use std::sync::{Arc, RwLock};
-use actix_web::{get, HttpRequest, HttpResponse, post, Responder};
+use actix_web::{get, web, Error, HttpRequest, HttpResponse, post, Responder};
 use actix_web::http::header;
-use actix_web::web::{Data, Json, Path, Payload};
-use actix_web_actors::ws;
+use actix_web::web::{Data, Json, Path};
 use chrono::Utc;
 use flate2::Compression;
 use flate2::write::GzEncoder;
@@ -302,35 +301,25 @@ async fn get_username(
 #[get("/api/place/ws/{id}")]
 async fn ws_index(
     req: HttpRequest,
-    stream: Payload,
-    data: Data<RwLock<AppState>>,
-    path: Path<String>,
-) -> HttpResponse {
-    let id = match path.into_inner().parse::<i64>() {
-        Ok(id) => id,
-        Err(_) => return HttpResponse::BadRequest().body("Invalid place"),
-    };
+    stream: web::Payload,
+    data: web::Data<RwLock<AppState>>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, Error> {
+    let id = path.into_inner().parse::<i64>().map_err(|_| actix_web::error::ErrorBadRequest("Invalid place"))?;
 
-    let app_state = match data.read() {
-        Ok(state) => state,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to read app state"),
-    };
+    let app_state = data.read().map_err(|_| actix_web::error::ErrorInternalServerError("Failed to read app state"))?;
 
-    let place = match app_state.places.get(&id) {
-        Some(place) => place,
-        None => return HttpResponse::BadRequest().body("Invalid place"),
-    };
+    let place = app_state.places.get(&id).ok_or_else(|| actix_web::error::ErrorBadRequest("Invalid place"))?;
 
-    match ws::start(
-        PlaceWebSocketConnection {
-            place: place.clone(),
-        },
-        &req,
-        stream,
-    ) {
-        Ok(response) => response,
-        Err(_) => HttpResponse::InternalServerError().body("Failed to start websocket"),
-    }
+    let ws_connection = PlaceWebSocketConnection::new(place.clone());
+
+    let (response, session, msg_stream) = actix_ws::handle(&req, stream)?;
+
+    actix_web::rt::spawn(async move {
+        ws_connection.run(session, msg_stream).await;
+    });
+
+    Ok(response)
 }
 
 #[get("/api/place/all/{id}")]

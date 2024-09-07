@@ -13,7 +13,7 @@
       </div>
     </div>
     <div class="w-full h-full border-2 border-black rounded-2xl flex flex-col p-4">
-      <p class="text-2xl">Tool :</p>
+      <p class="text-2xl">Tools :</p>
       <div class="grid grid-cols-4 gap-4 mt-2">
         <div
             v-for="(tool, index) in tools"
@@ -25,7 +25,7 @@
           <img :src="tool"/>
         </div>
       </div>
-      <p class="text-2xl mt-8">Action :</p>
+      <p class="text-2xl mt-8">Actions :</p>
       <div class="flex flex-col space-y-4 w-full items-center">
         <Button
             v-for="(action, index) in actions"

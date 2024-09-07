@@ -1,48 +1,46 @@
 use crate::place::Place;
-use crate::voxel::UpdateMessage;
-use actix::{Actor, AsyncContext, Handler, StreamHandler};
-use actix_web_actors::ws;
-use serde_json::json;
+use actix_ws::{Message, MessageStream, Session};
 use std::sync::{Arc, RwLock};
+use futures_util::StreamExt;
 
 pub struct PlaceWebSocketConnection {
     pub place: Arc<RwLock<Place>>,
 }
 
-impl Actor for PlaceWebSocketConnection {
-    type Context = ws::WebsocketContext<Self>;
-
-    fn started(&mut self, ctx: &mut Self::Context) {
-        let addr = ctx.address();
-        let place = self.place.write().unwrap();
-        place.voxel.add_session(addr);
+impl PlaceWebSocketConnection {
+    pub fn new(place: Arc<RwLock<Place>>) -> Self {
+        Self { place }
     }
-}
 
-impl Handler<UpdateMessage> for PlaceWebSocketConnection {
-    type Result = ();
+    pub async fn run(self, mut session: Session, mut msg_stream: MessageStream) {
+        {
+            let place = self.place.write().unwrap();
+            place.voxel.add_session(session.clone());
+        }
 
-    fn handle(&mut self, msg: UpdateMessage, ctx: &mut Self::Context) {
-        ctx.text(
-            serde_json::to_string(&json!({
-                "type": "update",
-                "x": msg.0,
-                "y": msg.1,
-                "z": msg.2,
-                "color": msg.3,
-            }))
-            .unwrap(),
-        );
-    }
-}
-
-impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for PlaceWebSocketConnection {
-    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        match msg {
-            Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
-            Ok(ws::Message::Text(text)) => ctx.text(text),
-            Ok(ws::Message::Binary(bin)) => ctx.binary(bin),
-            _ => (),
+        while let Some(msg) = msg_stream.next().await {
+            match msg {
+                Ok(Message::Ping(bytes)) => {
+                    if session.pong(&bytes).await.is_err() {
+                        break;
+                    }
+                }
+                Ok(Message::Text(text)) => {
+                    if session.text(text).await.is_err() {
+                        break;
+                    }
+                }
+                Ok(Message::Binary(bin)) => {
+                    if session.binary(bin).await.is_err() {
+                        break;
+                    }
+                }
+                Ok(Message::Close(reason)) => {
+                    let _ = session.close(reason).await;
+                    break;
+                }
+                _ => break,
+            }
         }
     }
 }

@@ -188,10 +188,14 @@ async fn vote_post(
     json: Json<VoteRequest>,
     req: HttpRequest,
 ) -> impl Responder {
-    let user_id = match check_user(req) {
+    /*let user_id = match check_user(req) {
         Ok(user_id) => user_id,
         Err(res) => return res,
-    };
+    };*/
+    match check_user(req) {
+        Ok(_) => (),
+        Err(res) => return res,
+    }
 
     let post_id = match json.post_id.parse::<i64>() {
         Ok(post_id) => post_id,
